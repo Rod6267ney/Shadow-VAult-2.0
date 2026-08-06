@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">ShadowVault</string>
+    <string name="title_profile_settings">Profile &amp; Settings</string>
+    <string name="title_shadow_identity">Shadow Identity</string>
+    <string name="desc_tap_change_pic">Tap to change profile picture</string>
+    <string name="title_gemini_key">Gemini API Key (Free Model)</string>
+    <string name="desc_gemini_key">Enter your key to unlock the Identity Generator features.</string>
+    <string name="action_save_config">SAVE CONFIGURATION</string>
+    <string name="msg_config_saved">Configuration Saved</string>
+    <string name="title_app_camouflage">App Camouflage</string>
+    <string name="desc_app_camouflage">Selecting camouflage will close the app and alter the icon and name on the home screen. A device restart may be required for launcher cache to update.</string>
+    <string name="lang_default">Default</string>
+    <string name="lang_calculator">Calculator</string>
+    <string name="lang_notes">Notes</string>
+    <string name="title_language">App Language</string>
+    <string name="desc_language">Select your preferred native language for the application.</string>
+</resources>

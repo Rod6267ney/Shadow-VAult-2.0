@@ -1,0 +1,6 @@
+{
+  "name": "ShadowVault",
+  "description": "A privacy vault, multi-instance manager, and identity generator",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
