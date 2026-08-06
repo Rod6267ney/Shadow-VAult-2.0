@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 
+#define LOG_TAG "ShadowVaultNative"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 static bool is_ptrace_detected = false;

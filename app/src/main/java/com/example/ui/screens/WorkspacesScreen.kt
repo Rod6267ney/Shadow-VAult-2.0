@@ -645,10 +645,9 @@ fun WorkspacesScreen(
         if (selectedFolderWorkspace != null && !isExpandedScreen) {
             val currentSpace = workspaces?.find { it.id == selectedFolderWorkspace?.id } ?: selectedFolderWorkspace!!
             WorkspaceFolderDialog(
-                workspace = currentSpace,
-                context = context,
+                space = currentSpace,
                 onDismiss = { selectedFolderWorkspace = null },
-                onWorkspaceUpdated = { loadWorkspaces() }
+                onRefresh = { loadWorkspaces() }
             )
         }
 

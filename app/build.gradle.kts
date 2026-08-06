@@ -15,8 +15,8 @@ android {
     applicationId = "com.aistudio.shadowvault.abzx"
     minSdk = 24
     targetSdk = 36
-    versionCode = 263004
-    versionName = "26.3.0.4"
+    versionCode = 264000
+    versionName = "26.4.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     externalNativeBuild {
@@ -27,18 +27,20 @@ android {
   }
 
   signingConfigs {
+    create("debugConfig") {
+      val defaultKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+      val localKeystore = file("${rootDir}/debug.keystore")
+      storeFile = if (localKeystore.exists()) localKeystore else defaultKeystore
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
       storePassword = System.getenv("STORE_PASSWORD")
       keyAlias = "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
-    }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
     }
   }
 
@@ -124,8 +126,8 @@ dependencies {
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
-  implementation("com.aitsuki:shizuku-api:13.1.0")
-  implementation("org.lsposed.hiddenapibypass:hiddenapibypass:4.3")
+  implementation("dev.rikka.shizuku:api:13.1.0")
+  implementation("dev.rikka.shizuku:provider:13.1.0")
 
   // Memory Profiling (Item 49)
   debugImplementation("com.squareup.leakcanary:leakcanary-android:2.12")
