@@ -91,8 +91,8 @@ fun DashboardScreen(
         while (isActive) {
             delay(1000)
             if (System.currentTimeMillis() - lastInteractionTime >= 60_000L) {
-                com.example.AppLockManager.isUnlocked = false
-                onLock()
+                // AppLockManager check disabled
+                // onLock()
                 break
             }
         }

@@ -299,6 +299,7 @@ fun ClonesScreen(
                     }
                 }
             }
+            }
             
             if (isExpandedScreen) {
                 Box(
@@ -320,45 +321,7 @@ fun ClonesScreen(
             }
         }
     }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 16.dp, bottom = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Workspace: $userId (${ws.second})", color = NeonCyan, style = MaterialTheme.typography.titleMedium)
-                                IconButton(onClick = { 
-                                    showDeleteDialog = true
-                                }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "Delete Workspace", tint = DangerRed)
-                                }
-                            }
-                        }
-                        
-                        if (userClones.isEmpty()) {
-                            item {
-                                Text("Nenhum app clonado neste espaço.", color = Color.Gray, modifier = Modifier.padding(start = 8.dp))
-                            }
-                        } else {
-                            items(userClones) { clone ->
-                                CloneItem(clone, viewModel)
-                            }
-                        }
-                    }
-                    
-                    if (orphanedClones.isNotEmpty()) {
-                        item {
-                            Text("Clones Órfãos (Workspace não encontrado)", color = DangerRed, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
-                        }
-                        items(orphanedClones) { clone ->
-                            CloneItem(clone, viewModel)
-                        }
-                    }
-                }
-            }
-        }
-    }
+
 
     if (showAppSelector) {
         AppSelectionWizard(viewModel, onDismiss = { showAppSelector = false })
@@ -864,6 +827,7 @@ fun InstalledAppRow(
             Text(appInfo.packageName, color = Color.Gray, style = MaterialTheme.typography.bodySmall, fontSize = 12.sp)
         }
     }
+}
 
 @Preview(showBackground = true, backgroundColor = 0xFF121212)
 @Composable

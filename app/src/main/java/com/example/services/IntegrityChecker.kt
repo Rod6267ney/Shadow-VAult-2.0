@@ -14,7 +14,7 @@ object IntegrityChecker {
     fun verifyApkIntegrity(context: Context): Boolean {
         try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            val apkPath = packageInfo.applicationInfo.sourceDir
+            val apkPath = packageInfo.applicationInfo?.sourceDir ?: return false
             val file = File(apkPath)
             
             if (!file.exists()) return false

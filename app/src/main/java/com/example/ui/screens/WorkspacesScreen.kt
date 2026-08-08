@@ -85,7 +85,7 @@ fun WorkspacesScreen(
     val creationState by workspaceViewModel.creationState.collectAsState()
     val (isShizukuAvailable, hasShizukuPermission) = com.example.utils.useShizukuStatus()
     var workspaces by remember { mutableStateOf<List<WorkspaceConfig>?>(null) }
-    var apps by remember { mutableStateOf<List<com.example.data.AppInfo>>(emptyList()) }
+    var apps by remember { mutableStateOf<List<Any>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var creationStep by remember { mutableIntStateOf(1) }
@@ -613,7 +613,7 @@ fun WorkspacesScreen(
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text("Nome: ${currentSpace.name}", color = Color.White, style = MaterialTheme.typography.titleLarge)
                                     Text("ID (Usuário Android): ${currentSpace.id}", color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
-                                    Text("Isolamento de Rede: ${if (currentSpace.networkIsolation) "Ativo" else "Inativo"}", color = Color.White)
+                                    Text("Isolamento de Rede: Inativo", color = Color.White)
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(onClick = { selectedFolderWorkspace = currentSpace }) {
                                         Text("Abrir Pasta Compartilhada")

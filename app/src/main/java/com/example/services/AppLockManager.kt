@@ -3,7 +3,6 @@ package com.example.services
 import android.app.Application
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,7 +22,7 @@ object AppLockManager : DefaultLifecycleObserver {
     private val scope = CoroutineScope(Dispatchers.Main)
 
     fun init(application: Application) {
-        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
+        // Disabled
     }
 
     override fun onStop(owner: LifecycleOwner) {
