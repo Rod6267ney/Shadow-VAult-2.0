@@ -64,6 +64,12 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         unlimitedClones: Boolean,
         useResidentialProxy: Boolean,
         selectedProxyRegion: String,
+        killSwitchEnabled: Boolean = false,
+        hardwareSpoofingEnabled: Boolean = false,
+        burnerModeEnabled: Boolean = false,
+        fakeGpsRegion: String = "",
+        personaArchetype: String = "Anônimo",
+        generateComplexPasswords: Boolean = false,
         onComplete: () -> Unit
     ) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -71,7 +77,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val context = getApplication<Application>()
                 val vaultName = workspaceName.ifBlank { "Novo Vault" }
-                val prompt = "Identidade sintética anônima para o workspace $vaultName"
+                val prompt = "Identidade sintética para o workspace $vaultName, arquétipo: $personaArchetype"
 
                 // 1. Immediately trigger identity generation via Gemini AI
                 val generator = AiIdentityGenerator(context)
@@ -112,6 +118,15 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                         if (useResidentialProxy) {
                             ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_proxy_region '$selectedProxyRegion'")
                             com.example.vpn.VpnManager.enableWorkspaceVpn(context, workspaceId, selectedProxyRegion)
+                        }
+                        if (killSwitchEnabled) {
+                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_kill_switch 'true'")
+                        }
+                        if (hardwareSpoofingEnabled) {
+                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_hardware_spoofing 'true'")
+                        }
+                        if (fakeGpsRegion.isNotBlank()) {
+                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_fake_gps '$fakeGpsRegion'")
                         }
                     } else {
                         _creationState.value = WorkspaceCreationState.Error("Falha ao criar Perfil via Shizuku.")

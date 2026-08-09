@@ -15,8 +15,8 @@ android {
     applicationId = "com.aistudio.shadowvault.abzx"
     minSdk = 24
     targetSdk = 36
-    versionCode = 264000
-    versionName = "26.4.0"
+    versionCode = 264001
+    versionName = "26.4.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     externalNativeBuild {
@@ -36,11 +36,11 @@ android {
       keyPassword = "android"
     }
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+      val keystorePath = "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      storePassword = "shadow2024"
+      keyAlias = "shadow-key"
+      keyPassword = "shadow2024"
     }
   }
 

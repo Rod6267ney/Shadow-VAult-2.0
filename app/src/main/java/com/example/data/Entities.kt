@@ -16,7 +16,8 @@ data class CloneEntity(
     val userId: String = "10",
     val isRunning: Boolean = false,
     val dateCreated: Long = System.currentTimeMillis(),
-    val colorHex: String? = null
+    val colorHex: String? = null,
+    val linkedIdentityId: String? = null
 )
 
 @Entity(tableName = "identities")

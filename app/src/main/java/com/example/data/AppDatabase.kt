@@ -9,7 +9,7 @@ import net.sqlcipher.database.SupportFactory
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [CloneEntity::class, IdentityEntity::class, SessionLogEntity::class, ProfileConfigEntity::class, InstanceConfigEntity::class, ClipboardEntity::class, NoteEntity::class], version = 9, exportSchema = false)
+@Database(entities = [CloneEntity::class, IdentityEntity::class, SessionLogEntity::class, ProfileConfigEntity::class, InstanceConfigEntity::class, ClipboardEntity::class, NoteEntity::class], version = 10, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun vaultDao(): VaultDao
 
@@ -33,13 +33,19 @@ abstract class AppDatabase : RoomDatabase() {
                     }
                 }
 
+                val MIGRATION_9_10 = object : Migration(9, 10) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("ALTER TABLE clones ADD COLUMN linkedIdentityId TEXT")
+                    }
+                }
+
                 val db = Room.databaseBuilder(
                     appContext,
                     AppDatabase::class.java,
                     dbName
                 )
                 .openHelperFactory(factory)
-                .addMigrations(MIGRATION_8_9)
+                .addMigrations(MIGRATION_8_9, MIGRATION_9_10)
                 .fallbackToDestructiveMigration(false)
                 .build()
 

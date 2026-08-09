@@ -1,7 +1,6 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,12 +13,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.settings.SettingsManager
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.DangerRed
+import kotlinx.coroutines.launch
 
 data class ChaosFeatureItem(
     val id: String,
@@ -30,10 +32,15 @@ data class ChaosFeatureItem(
     val initialEnabled: Boolean = true
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChaosOsControlScreen() {
-    var selectedCategory by remember { mutableStateOf("Estruturais") } // "Estruturais" or "Controle"
-
+    val context = LocalContext.current
+    val settingsManager = remember { SettingsManager(context) }
+    val scope = rememberCoroutineScope()
+    
+    val activeFeaturesFlow by settingsManager.chaosOsActiveFeatures.collectAsState(initial = null)
+    
     val structuralFeatures = listOf(
         ChaosFeatureItem("s1", "Camada de Isolamento de Processos (Namespaces PID/IPC)", "Isolamento estrito entre instâncias para que clones não enxerguem processos de outros workspaces.", "Estruturais", Icons.Filled.Security),
         ChaosFeatureItem("s2", "Criptografia Avançada SQLCipher em Camadas", "Chaves de criptografia AES-256 isoladas por workspace.", "Estruturais", Icons.Filled.VpnKey),
@@ -80,124 +87,329 @@ fun ChaosOsControlScreen() {
         ChaosFeatureItem("c20", "Modo Pânico por Gestos (Sensor de Queda/Agitar)", "Gatilhos rápidos por movimento físico para travamento.", "Controle", Icons.Filled.Gesture)
     )
 
-    // State map for feature toggles
-    val featureStates = remember { mutableStateOf(mutableMapOf<String, Boolean>().apply {
-        (structuralFeatures + controlFunctions).forEach { this[it.id] = true }
-    }) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .padding(bottom = 90.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            "MATRIZ DE CONTROLE & PERFORMANCE CHAOS OS",
-            style = MaterialTheme.typography.titleLarge,
-            color = NeonCyan,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            "40 Pilares de Blindagem, Isolamento e Controle Total ativados e operacionais.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.Gray
-        )
-
-        // Category Switcher Tabs
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Button(
-                onClick = { selectedCategory = "Estruturais" },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedCategory == "Estruturais") NeonCyan else Color.DarkGray
-                )
-            ) {
-                Text(
-                    "20 Melhorias Estruturais",
-                    color = if (selectedCategory == "Estruturais") Color.Black else Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
+    val allFeatures = remember { structuralFeatures + controlFunctions }
+    
+    var initialized by remember { mutableStateOf(false) }
+    var activeSet by remember { mutableStateOf(setOf<String>()) }
+    
+    LaunchedEffect(activeFeaturesFlow) {
+        if (!initialized) {
+            if (activeFeaturesFlow != null) {
+                if (activeFeaturesFlow!!.isEmpty()) {
+                    val allIds = allFeatures.map { it.id }.toSet()
+                    settingsManager.setChaosOsActiveFeatures(allIds)
+                    activeSet = allIds
+                } else {
+                    activeSet = activeFeaturesFlow!!
+                }
+                initialized = true
             }
-            Button(
-                onClick = { selectedCategory = "Controle" },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (selectedCategory == "Controle") ElectricPurple else Color.DarkGray
-                )
-            ) {
-                Text(
-                    "20 Funções de Controle",
-                    color = if (selectedCategory == "Controle") Color.White else Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp
-                )
+        } else {
+            if (activeFeaturesFlow != null) {
+                activeSet = activeFeaturesFlow!!
             }
         }
+    }
 
-        val currentList = if (selectedCategory == "Estruturais") structuralFeatures else controlFunctions
+    var selectedCategory by remember { mutableStateOf("Estruturais") }
+    var searchQuery by remember { mutableStateOf("") }
+    
+    var showDialog by remember { mutableStateOf(false) }
+    var featureToDisable by remember { mutableStateOf<ChaosFeatureItem?>(null) }
+    
+    val criticalFeatures = setOf("s1", "s2", "c2", "c4")
+    
+    fun toggleFeature(item: ChaosFeatureItem, checked: Boolean) {
+        if (!checked && item.id in criticalFeatures) {
+            featureToDisable = item
+            showDialog = true
+        } else {
+            val newSet = if (checked) activeSet + item.id else activeSet - item.id
+            activeSet = newSet
+            scope.launch { settingsManager.setChaosOsActiveFeatures(newSet) }
+        }
+    }
 
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    fun confirmDisable() {
+        featureToDisable?.let { item ->
+            val newSet = activeSet - item.id
+            activeSet = newSet
+            scope.launch { settingsManager.setChaosOsActiveFeatures(newSet) }
+        }
+        showDialog = false
+        featureToDisable = null
+    }
+
+    val currentList = remember(selectedCategory, searchQuery) {
+        val list = if (selectedCategory == "Estruturais") structuralFeatures else controlFunctions
+        if (searchQuery.isBlank()) list else list.filter { 
+            it.title.contains(searchQuery, ignoreCase = true) || it.description.contains(searchQuery, ignoreCase = true)
+        }
+    }
+    
+    val allCurrentActive = currentList.isNotEmpty() && currentList.all { it.id in activeSet }
+
+    if (showDialog) {
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            title = { Text("Aviso de Segurança", color = DangerRed) },
+            text = { Text("Desativar '${featureToDisable?.title}' pode comprometer seriamente a segurança do Vault. Deseja continuar?", color = Color.White) },
+            confirmButton = {
+                TextButton(onClick = { confirmDisable() }) {
+                    Text("Desativar", color = DangerRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("Cancelar", color = NeonCyan)
+                }
+            },
+            containerColor = Color.DarkGray,
+            titleContentColor = Color.White,
+            textContentColor = Color.White
+        )
+    }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 600.dp)
+                .fillMaxSize()
+                .padding(16.dp)
+                .padding(bottom = 90.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(currentList, key = { it.id }) { item ->
-                val isChecked = featureStates.value[item.id] ?: true
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth()
+            // Dashboard
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Text(
+                        "MATRIZ DE CONTROLE",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = NeonCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Shielding: ${activeSet.size}/40 Active",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (activeSet.size == 40) NeonCyan else Color.Yellow,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Buscar funções...", color = Color.Gray) },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search", tint = NeonCyan) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = NeonCyan,
+                    unfocusedBorderColor = Color.Gray,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                )
+            )
+
+            // Tabs
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { selectedCategory = "Estruturais" },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedCategory == "Estruturais") NeonCyan else Color.DarkGray
+                    )
+                ) {
+                    Text(
+                        "Estruturais",
+                        color = if (selectedCategory == "Estruturais") Color.Black else Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+                Button(
+                    onClick = { selectedCategory = "Controle" },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedCategory == "Controle") ElectricPurple else Color.DarkGray
+                    )
+                ) {
+                    Text(
+                        "Controle",
+                        color = if (selectedCategory == "Controle") Color.White else Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            // Perfis Rápidos
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { 
+                        val newSet = allFeatures.map { it.id }.toSet()
+                        activeSet = newSet
+                        scope.launch { settingsManager.setChaosOsActiveFeatures(newSet) }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, DangerRed)
+                ) { Text("Paranoia", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                OutlinedButton(
+                    onClick = { 
+                        val newSet = allFeatures.filter { it.id !in setOf("s4", "s5", "s10", "s16", "c12", "c18") }.map { it.id }.toSet()
+                        activeSet = newSet
+                        scope.launch { settingsManager.setChaosOsActiveFeatures(newSet) }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ElectricPurple),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ElectricPurple)
+                ) { Text("Equilíbrio", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                OutlinedButton(
+                    onClick = { 
+                        val newSet = setOf("s1", "s2", "s6", "c4", "c7", "c10")
+                        activeSet = newSet
+                        scope.launch { settingsManager.setChaosOsActiveFeatures(newSet) }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan)
+                ) { Text("Performance", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+            }
+
+            // Master Switch
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Ativar todos na aba atual",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Switch(
+                    checked = allCurrentActive,
+                    onCheckedChange = { enableAll ->
+                        val currentListIds = currentList.map { it.id }
+                        val newSet = if (enableAll) {
+                            activeSet + currentListIds
+                        } else {
+                            activeSet - currentListIds.filter { it !in criticalFeatures }.toSet()
+                        }
+                        activeSet = newSet
+                        scope.launch { settingsManager.setChaosOsActiveFeatures(newSet) }
+                    },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple,
+                        checkedTrackColor = (if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple).copy(alpha = 0.3f)
+                    )
+                )
+            }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(currentList, key = { it.id }) { item ->
+                    val isChecked = item.id in activeSet
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().animateItemPlacement()
                     ) {
                         Row(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                imageVector = item.icon,
-                                contentDescription = null,
-                                tint = if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Column {
-                                Text(
-                                    text = item.title,
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = item.icon,
+                                    contentDescription = null,
+                                    tint = if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple,
+                                    modifier = Modifier.size(28.dp)
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = item.description,
-                                    color = Color.Gray,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                        Switch(
-                            checked = isChecked,
-                            onCheckedChange = { checked ->
-                                featureStates.value = featureStates.value.toMutableMap().apply {
-                                    this[item.id] = checked
+                                Column {
+                                    Text(
+                                        text = item.title,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = item.description,
+                                        color = Color.Gray,
+                                        fontSize = 11.sp
+                                    )
                                 }
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple,
-                                checkedTrackColor = (if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple).copy(alpha = 0.3f)
+                            }
+                            Switch(
+                                checked = isChecked,
+                                onCheckedChange = { checked ->
+                                    toggleFeature(item, checked)
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple,
+                                    checkedTrackColor = (if (selectedCategory == "Estruturais") NeonCyan else ElectricPurple).copy(alpha = 0.3f)
+                                )
                             )
-                        )
+                        }
                     }
+                }
+            }
+            
+            // Rodapé de Ações
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = { 
+                        // Mock do log
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
+                ) {
+                    Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Chaos Logs", color = Color.White, fontSize = 12.sp)
+                }
+                Button(
+                    onClick = { 
+                        val newSet = allFeatures.map { it.id }.toSet()
+                        activeSet = newSet
+                        scope.launch { settingsManager.setChaosOsActiveFeatures(newSet) }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed.copy(alpha = 0.8f))
+                ) {
+                    Icon(Icons.Filled.Restore, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Factory Reset", color = Color.White, fontSize = 12.sp)
                 }
             }
         }

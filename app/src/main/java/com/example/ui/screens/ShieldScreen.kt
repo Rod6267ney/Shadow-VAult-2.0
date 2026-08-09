@@ -1,262 +1,413 @@
 package com.example.ui.screens
 
-import kotlinx.coroutines.Dispatchers
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material.icons.filled.GpsFixed
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.VpnKey
-import androidx.compose.material.icons.filled.ElectricBolt
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.RocketLaunch
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.settings.SettingsManager
+import com.example.ui.components.*
 import com.example.ui.theme.DangerRed
-import com.example.ui.theme.GlassBorder
+import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.frostedGlass
-import com.example.ui.theme.interactiveFrostedGlass
+import com.example.utils.ShizukuUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShieldScreen() {
     val context = LocalContext.current
+    val view = LocalView.current
     val settingsManager = remember { SettingsManager(context) }
     val scope = rememberCoroutineScope()
 
-    val isStealthMode by settingsManager.isStealthMode.collectAsState(initial = false)
-    val isCameraBlocked by settingsManager.isCameraBlocked.collectAsState(initial = false)
-    val isMicBlocked by settingsManager.isMicBlocked.collectAsState(initial = false)
-    val isGpsBlocked by settingsManager.isGpsBlocked.collectAsState(initial = false)
-    val decoyPin by settingsManager.decoyPin.collectAsState(initial = "")
+    val blockCamera by settingsManager.isCameraBlocked.collectAsState(initial = false)
+    val blockMic by settingsManager.isMicBlocked.collectAsState(initial = false)
+    val blockGps by settingsManager.isGpsBlocked.collectAsState(initial = false)
+    val blockMotionSensors by settingsManager.blockMotionSensors.collectAsState(initial = false)
+    val blockClipboard by settingsManager.blockClipboard.collectAsState(initial = false)
+    val blockEnvSensors by settingsManager.blockEnvSensors.collectAsState(initial = false)
+    val forceSecureFlag by settingsManager.forceSecureFlag.collectAsState(initial = false)
 
-    val isBypassPhantomProcs by settingsManager.isBypassPhantomProcs.collectAsState(initial = false)
-    val isBypassBatterySaver by settingsManager.isBypassBatterySaver.collectAsState(initial = false)
-    val isBypassBgLaunches by settingsManager.isBypassBgLaunches.collectAsState(initial = false)
-    val isBypassLimits by settingsManager.isBypassLimits.collectAsState(initial = false)
+    val bypassPhantomProcs by settingsManager.isBypassPhantomProcs.collectAsState(initial = false)
+    val disableTelemetry by settingsManager.disableTelemetry.collectAsState(initial = false)
+    val antiDozeMode by settingsManager.antiDozeMode.collectAsState(initial = false)
+    val forceBgAppops by settingsManager.forceBgAppops.collectAsState(initial = false)
+    val blockLogcat by settingsManager.blockLogcat.collectAsState(initial = false)
 
-    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        
-        Text("CONTROLE DE MÓDULOS E SISTEMA", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Gerencie os privilégios avançados de segurança e otimizações de barreira do HyperOS / MIUI.", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
-        Spacer(modifier = Modifier.height(24.dp))
+    val shuffleKeypad by settingsManager.shuffleKeypad.collectAsState(initial = false)
+    val coercionPin by settingsManager.coercionPin.collectAsState(initial = "")
+    val dynamicStealthMode by settingsManager.dynamicStealthMode.collectAsState(initial = false)
+    val camouflageNotifications by settingsManager.camouflageNotifications.collectAsState(initial = false)
 
-        Text("SISTEMA & DYSFUNÇÃO HYPEROS / MIUI", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.secondary)
-        Spacer(modifier = Modifier.height(8.dp))
+    var showPhantomDialog by remember { mutableStateOf(false) }
 
-        ShieldToggleItem(
-            title = "Bypass Limits (Desbloquear HyperOS)",
-            description = "Remove limitações de suspensão agressiva do HyperOS, desativa otimização do sistema e libera os limites do congelador de aplicativos cached.",
-            icon = Icons.Filled.Tune,
-            isChecked = isBypassLimits
-        ) {
-            scope.launch(Dispatchers.IO) {
-                settingsManager.setBypassLimits(it)
-                com.example.utils.ShizukuUtils.setHyperOSLimitsBypass(it)
-            }
-        }
-
-        ShieldToggleItem(
-            title = "Bypass Phantom Processes",
-            description = "Remove o limite de 32 processos em segundo plano imposto pelo Android 12+/HyperOS, prevenindo fechamentos do Shizuku.",
-            icon = Icons.Filled.Memory,
-            isChecked = isBypassPhantomProcs
-        ) {
-            scope.launch(Dispatchers.IO) {
-                settingsManager.setBypassPhantomProcs(it)
-                com.example.utils.ShizukuUtils.setPhantomProcessLimitBypass(it)
-            }
-        }
-
-        ShieldToggleItem(
-            title = "Desativar Otimização de Bateria",
-            description = "Insere o Vault e o Shizuku na lista branca de economia de bateria global do sistema.",
-            icon = Icons.Filled.ElectricBolt,
-            isChecked = isBypassBatterySaver
-        ) {
-            scope.launch(Dispatchers.IO) {
-                settingsManager.setBypassBatterySaver(it)
-                com.example.utils.ShizukuUtils.setBatterySaverBypass(context, it)
-            }
-        }
-
-        ShieldToggleItem(
-            title = "Liberar Inicialização em 2º Plano",
-            description = "Atribui permissão 'allow' nas permissões de background appops para evitar restrição de abertura remota de clones.",
-            icon = Icons.Filled.RocketLaunch,
-            isChecked = isBypassBgLaunches
-        ) {
-            scope.launch(Dispatchers.IO) {
-                settingsManager.setBypassBgLaunches(it)
-                com.example.utils.ShizukuUtils.setBackgroundLaunchBypass(context, it)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("BLOQUEIO DE HARDWARE", style = MaterialTheme.typography.titleSmall, color = DangerRed)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        ShieldToggleItem("Bloquear Câmera", null, Icons.Filled.CameraAlt, isCameraBlocked) { 
-            scope.launch(Dispatchers.IO) { 
-                settingsManager.setCameraBlocked(it) 
-                com.example.utils.ShizukuUtils.setCameraEnabled(!it)
-            } 
-        }
-        ShieldToggleItem("Bloquear Microfone", null, Icons.Filled.Mic, isMicBlocked) { 
-            scope.launch(Dispatchers.IO) { 
-                settingsManager.setMicBlocked(it) 
-                com.example.utils.ShizukuUtils.setMicEnabled(!it)
-            } 
-        }
-        ShieldToggleItem("Bloquear GPS (Localização)", null, Icons.Filled.GpsFixed, isGpsBlocked) { 
-            scope.launch(Dispatchers.IO) { 
-                settingsManager.setGpsBlocked(it) 
-                com.example.utils.ShizukuUtils.setGpsEnabled(!it)
-            } 
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("STEALTH & DISGUISE", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        ShieldToggleItem("Calculator Disguise", null, Icons.Filled.VisibilityOff, isStealthMode) { 
-            scope.launch(Dispatchers.IO) { settingsManager.setStealthMode(it) } 
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-        Text("AUTENTICAÇÃO DO VAULT", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        val realPinState by settingsManager.realPin.collectAsState(initial = "0000")
-        var newFallbackPin by remember { mutableStateOf("") }
-        var pinSavedSuccess by remember { mutableStateOf(false) }
-
-        Surface(
-            color = Color.White.copy(alpha = 0.05f),
-            shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Fingerprint,
-                        contentDescription = null,
-                        tint = NeonCyan,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column {
-                        Text("Impressão Digital + PIN Backup", color = Color.White, style = MaterialTheme.typography.bodyLarge)
-                        Text("O leitor biométrico é a chave principal. Caso haja falhas, o PIN de contingência libera o acesso.", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = GlassBorder)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Text("PIN DE CONTINGÊNCIA (BACKUP DE SEGURANÇA)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = newFallbackPin,
-                        onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) newFallbackPin = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text(if (realPinState.isNullOrEmpty()) "PIN 4 dígitos" else "PIN Atual: ${realPinState ?: "0000"}") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = GlassBorder,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        )
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    if (newFallbackPin.length == 4) {
-                        com.example.ui.components.FrostedButton(
-                            onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    settingsManager.setRealPin(newFallbackPin)
-                                    pinSavedSuccess = true
-                                }
-                                newFallbackPin = ""
-                            },
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Text("SALVAR")
-                        }
-                    } else {
-                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                            Text("SALVAR", color = Color.Gray)
-                        }
-                    }
-                }
-
-                if (pinSavedSuccess) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text("Novo PIN de contingência salvo com sucesso!", color = NeonCyan, style = MaterialTheme.typography.labelSmall)
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Use este PIN na tela de login caso o leitor de impressão digital do aparelho não funcione.", color = Color.Gray, style = MaterialTheme.typography.labelSmall)
-            }
-        }
-    }
-}
-
-@Composable
-fun ShieldToggleItem(
-    title: String,
-    description: String? = null,
-    icon: ImageVector,
-    isChecked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp)
-            .interactiveFrostedGlass(16.dp, onClick = { onCheckedChange(!isChecked) })
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = title, tint = if (isChecked) MaterialTheme.colorScheme.primary else Color.Gray, modifier = Modifier.size(24.dp))
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = Color.White, style = MaterialTheme.typography.bodyLarge)
-            if (description != null) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(description, color = Color.Gray, style = MaterialTheme.typography.labelMedium)
-            }
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Switch(
-            checked = isChecked, 
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha=0.3f)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Shield & Stealth", color = NeonCyan) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
-        )
+        },
+        containerColor = Color.Transparent
+    ) { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp)
+            ) {
+                // Radar de Integridade
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                        .frostedGlass(cornerRadius = 16.dp)
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Radar de Integridade",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Box(contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                progress = { 0.95f },
+                                modifier = Modifier.size(100.dp),
+                                color = NeonCyan,
+                                trackColor = Color.White.copy(alpha = 0.1f),
+                                strokeWidth = 8.dp
+                            )
+                            Text(
+                                text = "95%",
+                                color = NeonCyan,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 24.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Root/Magisk: Undetected",
+                            color = NeonCyan,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                // Ocultação Profunda de Hardware
+                SettingsSection(
+                    title = "Ocultação Profunda de Hardware",
+                    icon = Icons.Filled.Security,
+                    iconTint = ElectricPurple
+                ) {
+                    SettingsToggleItem(
+                        title = "Bloquear Câmera",
+                        subtitle = "Impede o acesso global à câmera.",
+                        checked = blockCamera,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) {
+                                settingsManager.setCameraBlocked(it)
+                                ShizukuUtils.setCameraEnabled(!it)
+                            }
+                        },
+                        icon = Icons.Filled.CameraAlt
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Bloquear Microfone",
+                        subtitle = "Desativa o microfone do sistema.",
+                        checked = blockMic,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) {
+                                settingsManager.setMicBlocked(it)
+                                ShizukuUtils.setMicEnabled(!it)
+                            }
+                        },
+                        icon = Icons.Filled.Mic
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Bloquear GPS",
+                        subtitle = "Força o desligamento da localização.",
+                        checked = blockGps,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) {
+                                settingsManager.setGpsBlocked(it)
+                                ShizukuUtils.setGpsEnabled(!it)
+                            }
+                        },
+                        icon = Icons.Filled.GpsFixed
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Bloquear Sensores de Movimento",
+                        subtitle = "Giroscópio e acelerômetro.",
+                        checked = blockMotionSensors,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setBlockMotionSensors(it) }
+                        },
+                        icon = Icons.Filled.ScreenRotation
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Bloquear Área de Transferência",
+                        subtitle = "Impede a leitura do clipboard.",
+                        checked = blockClipboard,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setBlockClipboard(it) }
+                        },
+                        icon = Icons.Filled.ContentPasteOff
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Bloquear Sensores de Ambiente",
+                        subtitle = "Luz, proximidade, barômetro.",
+                        checked = blockEnvSensors,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setBlockEnvSensors(it) }
+                        },
+                        icon = Icons.Filled.Sensors
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Anti-Screenshot (FLAG_SECURE)",
+                        subtitle = "Bloqueia capturas de tela no sistema.",
+                        checked = forceSecureFlag,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setForceSecureFlag(it) }
+                        },
+                        icon = Icons.Filled.VpnKey
+                    )
+                }
+
+                // Dominação do Sistema
+                SettingsSection(
+                    title = "Dominação do Sistema (Bypass HyperOS)",
+                    icon = Icons.Filled.Memory,
+                    iconTint = DangerRed
+                ) {
+                    SettingsToggleItem(
+                        title = "Bypass Phantom Processes",
+                        subtitle = "Impede o encerramento do Shizuku pelo sistema.",
+                        checked = bypassPhantomProcs,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            if (!it && bypassPhantomProcs) {
+                                showPhantomDialog = true
+                            } else {
+                                scope.launch(Dispatchers.IO) {
+                                    settingsManager.setBypassPhantomProcs(true)
+                                    ShizukuUtils.setPhantomProcessLimitBypass(true)
+                                }
+                            }
+                        },
+                        icon = Icons.Filled.SettingsSystemDaydream
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Desativar Telemetria",
+                        subtitle = "Bloqueia o envio de dados do sistema.",
+                        checked = disableTelemetry,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setDisableTelemetry(it) }
+                        },
+                        icon = Icons.Filled.Block
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Anti-Doze Global",
+                        subtitle = "Evita que o Vault hiberne.",
+                        checked = antiDozeMode,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setAntiDozeMode(it) }
+                        },
+                        icon = Icons.Filled.BatteryChargingFull
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Forçar BG AppOps",
+                        subtitle = "Permite execução irrestrita em background.",
+                        checked = forceBgAppops,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setForceBgAppops(it) }
+                        },
+                        icon = Icons.Filled.AppRegistration
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Bloquear Logcat",
+                        subtitle = "Limpa e bloqueia logs do sistema.",
+                        checked = blockLogcat,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setBlockLogcat(it) }
+                        },
+                        icon = Icons.Filled.ReceiptLong
+                    )
+                }
+
+                // Autenticação Dinâmica & Stealth
+                SettingsSection(
+                    title = "Autenticação Dinâmica & Stealth",
+                    icon = Icons.Filled.Fingerprint,
+                    iconTint = NeonCyan
+                ) {
+                    SettingsToggleItem(
+                        title = "Embaralhar Teclado (Shuffle Keypad)",
+                        subtitle = "Evita rastreamento de toques.",
+                        checked = shuffleKeypad,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setShuffleKeypad(it) }
+                        },
+                        icon = Icons.Filled.Dialpad
+                    )
+                    SettingsDivider()
+                    
+                    var tempCoercionPin by remember { mutableStateOf("") }
+                    Column(modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)) {
+                        Text("PIN de Coerção", color = Color.White, fontSize = 15.sp)
+                        Text("Ao usar este PIN, dados críticos são ocultados/destruídos.", color = Color.Gray, fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = tempCoercionPin,
+                                onValueChange = { if (it.length <= 4 && it.all { char -> char.isDigit() }) tempCoercionPin = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text(if (coercionPin.isNullOrEmpty()) "PIN 4 dígitos" else "Definido: ****") },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = NeonCyan,
+                                    unfocusedBorderColor = Color.Gray,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Button(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                                    scope.launch(Dispatchers.IO) {
+                                        settingsManager.setCoercionPin(tempCoercionPin)
+                                    }
+                                    tempCoercionPin = ""
+                                },
+                                enabled = tempCoercionPin.length == 4,
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                            ) {
+                                Text("SALVAR", color = Color.Black)
+                            }
+                        }
+                    }
+
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Modo Stealth Dinâmico",
+                        subtitle = "Oculta ícones e interfaces do app instantaneamente.",
+                        checked = dynamicStealthMode,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setDynamicStealthMode(it) }
+                        },
+                        icon = Icons.Filled.VisibilityOff
+                    )
+                    SettingsDivider()
+                    SettingsToggleItem(
+                        title = "Camuflar Notificações",
+                        subtitle = "Notificações aparecem como sistema/inofensivas.",
+                        checked = camouflageNotifications,
+                        onCheckedChange = {
+                            view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                            scope.launch(Dispatchers.IO) { settingsManager.setCamouflageNotifications(it) }
+                        },
+                        icon = Icons.Filled.NotificationsOff
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Wipe Módulos
+                Button(
+                    onClick = { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Filled.Warning, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "WIPE MÓDULOS (EMERGÊNCIA)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+
+        if (showPhantomDialog) {
+            AlertDialog(
+                onDismissRequest = { showPhantomDialog = false },
+                title = { Text("Aviso de Segurança", color = DangerRed) },
+                text = { Text("Desativar o Bypass de Processos Fantasmas pode fazer com que o HyperOS encerre o Shizuku e outros serviços do Shadow Vault abruptamente. Deseja continuar?", color = Color.White) },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showPhantomDialog = false
+                            scope.launch(Dispatchers.IO) {
+                                settingsManager.setBypassPhantomProcs(false)
+                                ShizukuUtils.setPhantomProcessLimitBypass(false)
+                            }
+                        }
+                    ) {
+                        Text("DESATIVAR", color = DangerRed)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPhantomDialog = false }) {
+                        Text("CANCELAR", color = NeonCyan)
+                    }
+                },
+                containerColor = Color.DarkGray
+            )
+        }
     }
 }

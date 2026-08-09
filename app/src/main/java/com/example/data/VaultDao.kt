@@ -26,6 +26,9 @@ interface VaultDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertIdentity(identity: IdentityEntity)
 
+    @androidx.room.Delete
+    suspend fun deleteIdentity(identity: IdentityEntity)
+
     @Query("SELECT * FROM session_logs ORDER BY timestamp DESC")
     fun getAllSessionLogs(): Flow<List<SessionLogEntity>>
 
