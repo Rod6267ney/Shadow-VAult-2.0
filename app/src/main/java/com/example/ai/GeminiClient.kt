@@ -4,6 +4,9 @@ import com.example.BuildConfig
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import okhttp3.Interceptor
+import okhttp3.Response
+import java.io.IOException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
@@ -12,6 +15,7 @@ import retrofit2.http.Body
 import retrofit2.http.POST
 import retrofit2.http.Query
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
@@ -67,6 +71,19 @@ interface GeminiApiService {
     ): GenerateContentResponse
 }
 
+class RetryInterceptor(private val maxRetries: Int = 3) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        var response = chain.proceed(chain.request())
+        var tryCount = 0
+        while (!response.isSuccessful && tryCount < maxRetries) {
+            tryCount++
+            response.close()
+            response = chain.proceed(chain.request())
+        }
+        return response
+    }
+}
+
 object RetrofitClient {
     private const val BASE_URL = "https://generativelanguage.googleapis.com/"
 
@@ -74,6 +91,7 @@ object RetrofitClient {
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .addInterceptor(RetryInterceptor(maxRetries = 3))
         .build()
 
     val service: GeminiApiService by lazy {
@@ -88,7 +106,18 @@ object RetrofitClient {
 }
 
 class AiIdentityGenerator(private val context: android.content.Context) {
+    companion object {
+        private var lastRequestTime = 0L
+        private const val MIN_INTERVAL_MS = 5000L // 5 seconds rate limit
+    }
+
     suspend fun generateIdentity(prompt: String): String = withContext(Dispatchers.IO) {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastRequestTime < MIN_INTERVAL_MS) {
+            delay(MIN_INTERVAL_MS - (currentTime - lastRequestTime))
+        }
+        lastRequestTime = System.currentTimeMillis()
+
         val vaultManager = com.example.data.VaultManager(context)
         var apiKey = vaultManager.getGeminiApiKey()
         if (apiKey.isBlank()) apiKey = BuildConfig.GEMINI_API_KEY

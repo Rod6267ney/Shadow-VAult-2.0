@@ -35,6 +35,7 @@ import com.example.ui.theme.GlassBorder
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.interactiveFrostedGlass
 import com.example.utils.BiometricAuthHelper
+import com.example.utils.HapticEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -315,6 +316,9 @@ fun LoginScreen(onLoginSuccess: (Boolean) -> Unit) {
                         com.example.services.AppLockManager.unlockApp()
                         onLoginSuccess(false)
                     } else if (!panicPin.isNullOrEmpty() && pin == panicPin) {
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            com.example.data.AppDatabase.getDatabase(context).clearAllTables()
+                        }
                         com.example.GlobalErrorHandler.lastError = "java.lang.NullPointerException: Attempt to invoke virtual method on a null object reference"
                         com.example.GlobalErrorHandler.hasCrashed = true
                     }
@@ -379,24 +383,32 @@ fun LoginScreen(onLoginSuccess: (Boolean) -> Unit) {
             PinPad(
                 onNumberClick = { num ->
                     if (lockoutTimeRemaining > 0) return@PinPad
+                    HapticEngine.vibrateClick(context)
                     if (pinInput.length < 4) {
                         pinInput += num
                         errorMessage = null
                         if (pinInput.length == 4) {
                             val targetPin = realPin ?: "0000"
                             if (pinInput == targetPin) {
+                                HapticEngine.vibrateSuccess(context)
                                 failedAttempts = 0
                                 com.example.services.AppLockManager.unlockApp()
                                 onLoginSuccess(true)
                             } else if (!decoyPin.isNullOrEmpty() && pinInput == decoyPin) {
+                                HapticEngine.vibrateClick(context)
                                 failedAttempts = 0
                                 com.example.services.AppLockManager.unlockApp()
                                 onLoginSuccess(false)
                             } else if (!panicPin.isNullOrEmpty() && pinInput == panicPin) {
+                                HapticEngine.vibrateLock(context)
                                 failedAttempts = 0
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.example.data.AppDatabase.getDatabase(context).clearAllTables()
+                                }
                                 com.example.GlobalErrorHandler.lastError = "java.lang.NullPointerException: Attempt to invoke virtual method on a null object reference"
                                 com.example.GlobalErrorHandler.hasCrashed = true
                             } else {
+                                HapticEngine.vibrateError(context)
                                 failedAttempts++
                                 pinInput = ""
                                 errorMessage = "PIN incorreto. Tentativa $failedAttempts de 3."
@@ -406,6 +418,7 @@ fun LoginScreen(onLoginSuccess: (Boolean) -> Unit) {
                 },
                 onBackspace = {
                     if (lockoutTimeRemaining > 0) return@PinPad
+                    HapticEngine.vibrateClick(context)
                     if (pinInput.isNotEmpty()) {
                         pinInput = pinInput.dropLast(1)
                         errorMessage = null
