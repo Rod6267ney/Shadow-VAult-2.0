@@ -47,6 +47,8 @@ import com.example.services.CloneManager
 import com.example.ui.components.EmptyStateView
 import com.example.utils.HapticEngine
 import com.example.utils.useShizukuStatus
+import com.example.services.CloneLogManager
+import com.example.services.LogLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -126,8 +128,24 @@ fun ClonesScreen(
     val vaultManager = remember { VaultManager(context) }
     var showCloneWizard by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var viewMode by remember { mutableStateOf(vaultManager.getClonesViewMode()) } // "GRID" or "LIST"
-    var biometricLockVersion by remember { mutableIntStateOf(0) } // Trigger recomposition on lock toggle
+    var viewMode by remember { mutableStateOf(vaultManager.getClonesViewMode()) }
+    var biometricLockVersion by remember { mutableIntStateOf(0) }
+
+    // --- Real-time clone operation logs ---
+    val cloneLogs by CloneLogManager.logs.collectAsState()
+    val isCloneRunning by CloneLogManager.isRunning.collectAsState()
+    var showLogPanel by remember { mutableStateOf(false) }
+    val logListState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    // Auto-show and auto-scroll log panel when operation starts
+    LaunchedEffect(isCloneRunning) {
+        if (isCloneRunning) showLogPanel = true
+    }
+    LaunchedEffect(cloneLogs.size) {
+        if (cloneLogs.isNotEmpty()) {
+            logListState.animateScrollToItem(cloneLogs.size - 1)
+        }
+    }
 
     val filteredClones = remember(clones, searchQuery) {
         if (searchQuery.isBlank()) clones
@@ -214,7 +232,120 @@ fun ClonesScreen(
                 }
             }
 
-            // Search Bar & View Mode Toggle (Items 05 & 06)
+            // --- Real-time Clone Log Panel ---
+            AnimatedVisibility(
+                visible = showLogPanel && cloneLogs.isNotEmpty(),
+                enter = expandVertically(animationSpec = tween(300)) + fadeIn(),
+                exit = shrinkVertically(animationSpec = tween(200)) + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .frostedGlass(12.dp)
+                        .border(1.dp, NeonCyan.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isCloneRunning) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = NeonCyan,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.width(8.dp))
+                            } else {
+                                Icon(Icons.Filled.Code, contentDescription = null,
+                                    tint = NeonCyan, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(
+                                text = if (isCloneRunning) "Operação em andamento..." else "Log da última operação",
+                                color = NeonCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Row {
+                            if (!isCloneRunning) {
+                                IconButton(onClick = { CloneLogManager.clear() }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Filled.ClearAll, contentDescription = "Limpar logs",
+                                        tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            IconButton(onClick = { showLogPanel = false }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Minimizar",
+                                    tint = Color.White.copy(alpha = 0.5f), modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LazyColumn(
+                        state = logListState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 60.dp, max = 220.dp)
+                    ) {
+                        items(cloneLogs) { entry ->
+                            val (tagColor, lineColor) = when (entry.level) {
+                                LogLevel.SUCCESS -> Pair(Color(0xFF00FF88), Color(0xFFCCFFE0))
+                                LogLevel.ERROR   -> Pair(Color(0xFFFF4444), Color(0xFFFFCCCC))
+                                LogLevel.WARNING -> Pair(Color(0xFFFFAA00), Color(0xFFFFEECC))
+                                LogLevel.INFO    -> Pair(NeonCyan.copy(alpha = 0.8f), Color.White.copy(alpha = 0.75f))
+                            }
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
+                                Text(
+                                    text = "[${entry.timestamp}] ",
+                                    color = Color.White.copy(alpha = 0.35f),
+                                    fontSize = 9.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                                Text(
+                                    text = "[${entry.tag}] ",
+                                    color = tagColor,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                                )
+                                Text(
+                                    text = entry.message,
+                                    color = lineColor,
+                                    fontSize = 9.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Show/hide log panel button (when hidden but logs exist)
+            if (!showLogPanel && cloneLogs.isNotEmpty()) {
+                TextButton(
+                    onClick = { showLogPanel = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, NeonCyan.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
+                    colors = ButtonDefaults.textButtonColors(contentColor = NeonCyan)
+                ) {
+                    Icon(Icons.Filled.Code, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Ver log da última operação", fontSize = 11.sp)
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(14.dp))
+                }
+            }
+
+            // Search Bar & View Mode Toggle
             if (clones.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),

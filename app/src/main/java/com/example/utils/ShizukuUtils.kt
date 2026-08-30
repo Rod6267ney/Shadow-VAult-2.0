@@ -321,24 +321,91 @@ object ShizukuUtils {
     }
 
     suspend fun installExistingApp(userId: String, packageName: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val L = com.example.services.CloneLogManager
+
+        // Pre-check: Shizuku
         if (!isShizukuAvailable() || !hasShizukuPermission()) {
+            L.log("SHIZUKU", "Shizuku não conectado ou sem permissão", com.example.services.LogLevel.ERROR)
             return@withContext Result.failure(Exception("Shizuku is not connected or lacks permission."))
         }
-        
+        L.log("SHIZUKU", "Conectado e com permissão ✓", com.example.services.LogLevel.SUCCESS)
+
+        // Pre-check: verify target user profile exists
+        val userList = executeCommand("pm list users")
+        if (!userList.contains("UserInfo{$userId:")) {
+            L.log("WORKSPACE", "Perfil $userId não encontrado em 'pm list users': $userList", com.example.services.LogLevel.ERROR)
+            return@withContext Result.failure(Exception("Work Profile $userId does not exist. Create it first."))
+        }
+        L.log("WORKSPACE", "Perfil $userId verificado ✓", com.example.services.LogLevel.SUCCESS)
+
+        // Ensure profile is started/unlocked
+        L.log("WORKSPACE", "Iniciando perfil $userId...", com.example.services.LogLevel.INFO)
+        executeCommand("am start-user $userId")
+
+        // --- ESTRATÉGIA 1: cmd package install-existing (Android 8+) ---
+        L.log("INSTALL", "Estratégia 1: cmd package install-existing --user $userId $packageName", com.example.services.LogLevel.INFO)
         var output = executeCommand("cmd package install-existing --user $userId $packageName", 30000L)
-        if (output.contains("Error") || output.contains("Exception") || output.contains("Failure")) {
-            // Fallback for older devices/custom ROMs
-            output = executeCommand("pm install-existing --user $userId $packageName", 30000L)
-        }
-        
-        if (output.contains("Error") || output.contains("Exception") || output.contains("Failure")) {
-            onLogEvent?.invoke("ERROR", "Install Failed: $output")
-            Result.failure(Exception(output))
-        } else {
+        L.log("INSTALL", "→ Resultado: ${output.trim().take(200)}", com.example.services.LogLevel.INFO)
+
+        if (!output.contains("Error") && !output.contains("Exception") && !output.contains("Failure")) {
+            L.log("INSTALL", "Estratégia 1 bem-sucedida ✓", com.example.services.LogLevel.SUCCESS)
             grantAllPermissions(userId, packageName)
-            onLogEvent?.invoke("APP_INSTALLED", "Installed and granted permissions for $packageName on User $userId")
-            Result.success(Unit)
+            onLogEvent?.invoke("APP_INSTALLED", "Estratégia 1 OK: $packageName → User $userId")
+            return@withContext Result.success(Unit)
         }
+        L.log("INSTALL", "Estratégia 1 falhou, tentando estratégia 2...", com.example.services.LogLevel.WARNING)
+
+        // --- ESTRATÉGIA 2: pm install-existing (ROMs antigas / MIUI) ---
+        L.log("INSTALL", "Estratégia 2: pm install-existing --user $userId $packageName", com.example.services.LogLevel.INFO)
+        output = executeCommand("pm install-existing --user $userId $packageName", 30000L)
+        L.log("INSTALL", "→ Resultado: ${output.trim().take(200)}", com.example.services.LogLevel.INFO)
+
+        if (!output.contains("Error") && !output.contains("Exception") && !output.contains("Failure")) {
+            L.log("INSTALL", "Estratégia 2 bem-sucedida ✓", com.example.services.LogLevel.SUCCESS)
+            grantAllPermissions(userId, packageName)
+            onLogEvent?.invoke("APP_INSTALLED", "Estratégia 2 OK: $packageName → User $userId")
+            return@withContext Result.success(Unit)
+        }
+        L.log("INSTALL", "Estratégia 2 falhou, tentando estratégia 3 (cópia de APK)...", com.example.services.LogLevel.WARNING)
+
+        // --- ESTRATÉGIA 3: Localizar APK no usuário 0 e instalar diretamente ---
+        L.log("APK", "Localizando caminho do APK de $packageName no usuário 0...", com.example.services.LogLevel.INFO)
+        val apkPathRaw = executeCommand("pm path $packageName")
+        val apkPath = apkPathRaw.removePrefix("package:").trim()
+
+        if (apkPath.isNotBlank() && apkPath.startsWith("/")) {
+            L.log("APK", "APK encontrado: $apkPath ✓", com.example.services.LogLevel.SUCCESS)
+            L.log("INSTALL", "Estratégia 3: pm install -r --user $userId $apkPath", com.example.services.LogLevel.INFO)
+            output = executeCommand("pm install -r --user $userId \"$apkPath\"", 60000L)
+            L.log("INSTALL", "→ Resultado: ${output.trim().take(200)}", com.example.services.LogLevel.INFO)
+
+            if (!output.contains("Error") && !output.contains("Exception") && !output.contains("Failure")) {
+                L.log("INSTALL", "Estratégia 3 bem-sucedida ✓", com.example.services.LogLevel.SUCCESS)
+                grantAllPermissions(userId, packageName)
+                onLogEvent?.invoke("APP_INSTALLED", "Estratégia 3 OK: $packageName → User $userId")
+                return@withContext Result.success(Unit)
+            }
+            L.log("INSTALL", "Estratégia 3 falhou: ${output.trim().take(150)}", com.example.services.LogLevel.WARNING)
+        } else {
+            L.log("APK", "APK não encontrado no sistema (app não instalado no perfil 0?): $apkPathRaw", com.example.services.LogLevel.WARNING)
+        }
+
+        // --- ESTRATÉGIA 4: Habilitar pacote diretamente se já existir no perfil ---
+        L.log("INSTALL", "Estratégia 4: verificar se $packageName já existe no perfil $userId e habilitar...", com.example.services.LogLevel.INFO)
+        val listInProfile = executeCommand("pm list packages --user $userId")
+        if (listInProfile.contains(packageName)) {
+            executeCommand("pm enable --user $userId $packageName")
+            L.log("INSTALL", "Estratégia 4: pacote já existia, habilitado ✓", com.example.services.LogLevel.SUCCESS)
+            grantAllPermissions(userId, packageName)
+            onLogEvent?.invoke("APP_INSTALLED", "Estratégia 4 OK (enable): $packageName → User $userId")
+            return@withContext Result.success(Unit)
+        }
+
+        // All strategies failed
+        val finalError = "Todas as 4 estratégias de instalação falharam para $packageName no perfil $userId. Verifique se o app está instalado e se o Shizuku tem permissões de Device Owner."
+        L.log("ERROR", finalError, com.example.services.LogLevel.ERROR)
+        onLogEvent?.invoke("ERROR", finalError)
+        Result.failure(Exception(finalError))
     }
 
     private fun getUserIdFromUserHandle(userHandle: android.os.UserHandle): Int {

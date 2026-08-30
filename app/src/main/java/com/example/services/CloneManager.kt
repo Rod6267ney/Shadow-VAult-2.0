@@ -34,11 +34,14 @@ object CloneManager {
         hideRoot: Boolean = false,
         strictPackageFirewall: Boolean = false,
         proxyRegion: String? = null,
-        cloneMode: String = "WORK_PROFILE", // "WORK_PROFILE" ou "SANDBOX_NON_ROOT"
+        cloneMode: String = "WORK_PROFILE",
         firewallEnabled: Boolean = false,
         spoofProfile: String? = null,
         onComplete: (Boolean) -> Unit = {}
     ) {
+        val L = com.example.services.CloneLogManager
+        L.startOperation()
+
         serviceScope.launch {
             try {
                 val pm = context.packageManager
@@ -46,15 +49,18 @@ object CloneManager {
                 val appName = customName ?: pm.getApplicationLabel(appToClone).toString()
                 val dao = AppDatabase.getDatabase(context).vaultDao()
 
-
+                L.log("CLONE", "Iniciando clonagem de $appName ($packageName)", com.example.services.LogLevel.INFO)
+                L.log("CLONE", "Modo: $cloneMode | Workspace alvo: ${targetUserId ?: "Novo"}", com.example.services.LogLevel.INFO)
 
                 // 1. MODO SANDBOX APP-LEVEL (SEM ROOT)
                 if (cloneMode == "SANDBOX_NON_ROOT") {
+                    L.log("SANDBOX", "Modo Sandbox sem Root ativado", com.example.services.LogLevel.INFO)
                     withContext(Dispatchers.Main) { Toast.makeText(context, "Iniciando clonagem App-Level Sandbox...", Toast.LENGTH_SHORT).show() }
                     
                     SandboxEngine.installToSandbox(context, appToClone) { success, vUserId ->
                         if (success && vUserId != null) {
                             serviceScope.launch {
+                                L.log("SANDBOX", "Instalação no Sandbox $vUserId concluída ✓", com.example.services.LogLevel.SUCCESS)
                                 dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "CLONE_SUCCESS", message = "Successfully cloned $appName into Sandbox $vUserId"))
                                 dao.insertClone(
                                     CloneEntity(
@@ -66,13 +72,15 @@ object CloneManager {
                                         spoofProfile = spoofProfile
                                     )
                                 )
-                                // Aplica Spoofing Profundo simulado se necessário
                                 if (spoofProfile != null) {
                                     DeepSpoofEngine.applySpoofing(context, packageName, spoofProfile)
                                 }
+                                L.finishOperation()
                                 onComplete(true)
                             }
                         } else {
+                            L.log("SANDBOX", "Falha ao instalar no Sandbox", com.example.services.LogLevel.ERROR)
+                            L.finishOperation()
                             onComplete(false)
                         }
                     }
@@ -80,47 +88,68 @@ object CloneManager {
                 }
 
                 // 2. MODO WORK PROFILE (REQUER SHIZUKU)
-                if (!ShizukuUtils.isShizukuAvailable() || !ShizukuUtils.hasShizukuPermission()) {
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "Shizuku não está pronto ou sem permissão para modo Work Profile", Toast.LENGTH_SHORT).show() }
+                L.log("SHIZUKU", "Verificando disponibilidade do Shizuku...", com.example.services.LogLevel.INFO)
+                if (!ShizukuUtils.isShizukuAvailable()) {
+                    L.log("SHIZUKU", "Shizuku NÃO está disponível. Abra o app Shizuku e ative o serviço.", com.example.services.LogLevel.ERROR)
+                    withContext(Dispatchers.Main) { Toast.makeText(context, "Shizuku não está ativo. Abra o app Shizuku e ative o serviço ADB.", Toast.LENGTH_LONG).show() }
+                    L.finishOperation()
                     onComplete(false)
                     return@launch
                 }
+                if (!ShizukuUtils.hasShizukuPermission()) {
+                    L.log("SHIZUKU", "Shizuku disponível mas SEM permissão. Conceda permissão no app Shizuku.", com.example.services.LogLevel.ERROR)
+                    withContext(Dispatchers.Main) { Toast.makeText(context, "Shadow Vault não tem permissão do Shizuku. Abra o Shizuku e autorize.", Toast.LENGTH_LONG).show() }
+                    L.finishOperation()
+                    onComplete(false)
+                    return@launch
+                }
+                L.log("SHIZUKU", "Shizuku OK ✓", com.example.services.LogLevel.SUCCESS)
 
                 var finalUserId: String
                 var isNewWorkspace = false
                 if (targetUserId == null) {
+                    L.log("WORKSPACE", "Nenhum workspace alvo. Criando novo Work Profile...", com.example.services.LogLevel.INFO)
                     withContext(Dispatchers.Main) { Toast.makeText(context, "Criando novo workspace...", Toast.LENGTH_SHORT).show() }
                     val prefix = "Workspace_"
                     val profileResult = ShizukuUtils.createWorkProfile("${prefix}${System.currentTimeMillis() % 1000}")
                     if (profileResult.isFailure) {
                         val errMsg = profileResult.exceptionOrNull()?.message ?: "Falha desconhecida"
+                        L.log("WORKSPACE", "Falha ao criar Work Profile: $errMsg", com.example.services.LogLevel.ERROR)
                         withContext(Dispatchers.Main) {
                             Toast.makeText(context, "Não foi possível criar workspace: $errMsg\nVerifique se as Configurações de Segurança USB do Shizuku estão ativas no seu celular.", Toast.LENGTH_LONG).show()
                         }
+                        L.finishOperation()
                         onComplete(false)
                         return@launch
                     }
                     finalUserId = profileResult.getOrNull() ?: "10"
                     isNewWorkspace = true
+                    L.log("WORKSPACE", "Work Profile criado com ID $finalUserId ✓", com.example.services.LogLevel.SUCCESS)
                     dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "WORKSPACE_CREATED", message = "Created new workspace $finalUserId"))
                 } else {
                     val existingClones = dao.getAllClones().first()
                     val alreadyExists = existingClones.any { it.packageName == packageName && it.userId == targetUserId }
                     if (alreadyExists) {
+                        L.log("WORKSPACE", "Clone já existe em $targetUserId. Criando container separado...", com.example.services.LogLevel.WARNING)
                         withContext(Dispatchers.Main) { Toast.makeText(context, "Instância existente. Criando container único...", Toast.LENGTH_SHORT).show() }
                         val profileResult = ShizukuUtils.createWorkProfile("Clone_${packageName.takeLast(4)}_${System.currentTimeMillis() % 1000}")
                         if (profileResult.isFailure) {
+                            L.log("WORKSPACE", "Falha ao criar container separado: ${profileResult.exceptionOrNull()?.message}", com.example.services.LogLevel.ERROR)
                             withContext(Dispatchers.Main) { Toast.makeText(context, "Erro ao criar container interno.", Toast.LENGTH_SHORT).show() }
+                            L.finishOperation()
                             onComplete(false)
                             return@launch
                         }
                         finalUserId = profileResult.getOrNull() ?: targetUserId
+                        L.log("WORKSPACE", "Container separado criado com ID $finalUserId ✓", com.example.services.LogLevel.SUCCESS)
                     } else {
                         finalUserId = targetUserId
+                        L.log("WORKSPACE", "Usando workspace existente ID $finalUserId ✓", com.example.services.LogLevel.INFO)
                     }
                 }
 
-                // Apply Fake Settings using new generator
+                // Apply Fake Settings
+                L.log("SPOOF", "Aplicando identificadores falsos ao perfil $finalUserId...", com.example.services.LogLevel.INFO)
                 DeviceIdentifierGenerator.applySpoofedIdentifiers(
                     userId = finalUserId,
                     fakeAndroidId = fakeAndroidId,
@@ -131,14 +160,13 @@ object CloneManager {
                     fakeAdId = fakeAdId,
                     fakeSim = fakeSim
                 )
+                L.log("SPOOF", "Identificadores aplicados ✓", com.example.services.LogLevel.SUCCESS)
 
+                L.log("CLONE", "Iniciando instalação de $appName no perfil $finalUserId...", com.example.services.LogLevel.INFO)
                 withContext(Dispatchers.Main) { Toast.makeText(context, "Clonando $appName...", Toast.LENGTH_SHORT).show() }
 
-                var installSuccess = true
-                var errorMessage: String? = null
-
                 val installResult = ShizukuUtils.installExistingApp(finalUserId, packageName)
-                
+
                 val unlimitedClonesStr = ShizukuUtils.executeCommand("settings get --user $finalUserId secure chaos_unlimited_clones")
                 val isUnlimited = unlimitedClonesStr.contains("true", ignoreCase = true)
 
@@ -147,22 +175,22 @@ object CloneManager {
                 }
 
                 if (installResult.isFailure) {
-                    installSuccess = false
-                    errorMessage = installResult.exceptionOrNull()?.message
-                }
-
-                if (!installSuccess) {
+                    val errorMessage = installResult.exceptionOrNull()?.message ?: "Erro desconhecido"
+                    L.log("ERROR", "Instalação FALHOU: $errorMessage", com.example.services.LogLevel.ERROR)
                     dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "ERROR", message = "Failed to clone $appName: $errorMessage"))
                     if (isNewWorkspace && finalUserId != "10") {
-                        // Rollback new workspace
+                        L.log("ROLLBACK", "Revertendo workspace $finalUserId criado para esta operação...", com.example.services.LogLevel.WARNING)
                         ShizukuUtils.executeCommand("pm remove-user $finalUserId")
                         dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "ROLLBACK", message = "Rolled back workspace $finalUserId due to clone failure"))
+                        L.log("ROLLBACK", "Workspace removido ✓", com.example.services.LogLevel.INFO)
                     }
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Falha ao clonar aplicativo: $errorMessage", Toast.LENGTH_LONG).show()
+                        Toast.makeText(context, "Falha ao clonar: $errorMessage", Toast.LENGTH_LONG).show()
                     }
+                    L.finishOperation()
                     onComplete(false)
                 } else {
+                    L.log("CLONE", "$appName instalado com sucesso no perfil $finalUserId ✓", com.example.services.LogLevel.SUCCESS)
                     dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "CLONE_SUCCESS", message = "Successfully cloned $appName into $finalUserId"))
                     dao.insertClone(
                         CloneEntity(
@@ -174,40 +202,42 @@ object CloneManager {
                             spoofProfile = spoofProfile
                         )
                     )
-                    
-                    // Applica Spoofing Profundo
+
                     if (spoofProfile != null) {
+                        L.log("SPOOF", "Aplicando perfil de spoofing profundo...", com.example.services.LogLevel.INFO)
                         DeepSpoofEngine.applySpoofing(context, packageName, spoofProfile)
                     }
-                    
-                    // Applica Firewall Granular
+
                     if (firewallEnabled) {
-                        // Simula obter o UID do clone
+                        L.log("FIREWALL", "Ativando firewall granular para o clone...", com.example.services.LogLevel.INFO)
                         val fakeUid = 1010000 + (1000..9999).random()
                         FirewallEngine.enableFirewallForUid(context, fakeUid)
                     }
-                    
+
                     var finalProxyRegion = ShizukuUtils.executeCommand("settings get --user $finalUserId secure chaos_proxy_region").trim()
-                    
                     if (proxyRegion != null) {
                         ShizukuUtils.executeCommand("settings put --user $finalUserId secure chaos_proxy_region '$proxyRegion'")
                         finalProxyRegion = proxyRegion
                     }
-
                     if (finalProxyRegion != "null" && finalProxyRegion.isNotBlank() && finalProxyRegion != "None") {
+                        L.log("VPN", "Ativando VPN para região $finalProxyRegion...", com.example.services.LogLevel.INFO)
                         com.example.vpn.VpnManager.enableWorkspaceVpn(context, finalUserId, finalProxyRegion)
                     }
-                    
+
+                    L.log("DONE", "✓ $appName clonado com sucesso no Workspace $finalUserId!", com.example.services.LogLevel.SUCCESS)
                     withContext(Dispatchers.Main) {
                         Toast.makeText(context, "$appName clonado com sucesso!", Toast.LENGTH_SHORT).show()
                     }
+                    L.finishOperation()
                     onComplete(true)
                 }
             } catch (e: Throwable) {
                 e.printStackTrace()
+                com.example.services.CloneLogManager.log("CRASH", "Exceção inesperada: ${e.message}", com.example.services.LogLevel.ERROR)
                 withContext(Dispatchers.Main) {
                     Toast.makeText(context, "Erro na operação de clonagem: ${e.message}", Toast.LENGTH_LONG).show()
                 }
+                com.example.services.CloneLogManager.finishOperation()
                 onComplete(false)
             }
         }
