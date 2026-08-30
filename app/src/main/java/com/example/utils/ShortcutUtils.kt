@@ -52,4 +52,24 @@ object ShortcutUtils {
             Toast.makeText(context, "Atalhos não suportados neste launcher", Toast.LENGTH_SHORT).show()
         }
     }
+
+    fun publishDynamicShortcuts(context: Context, workspaces: List<com.example.data.WorkspaceConfig>) {
+        try {
+            val shortcutList = workspaces.take(4).map { space ->
+                val intent = Intent(context, MainActivity::class.java).apply {
+                    action = Intent.ACTION_VIEW
+                    putExtra("shortcut_workspace_id", space.id)
+                }
+                ShortcutInfoCompat.Builder(context, "dynamic_workspace_${space.id}")
+                    .setShortLabel(space.name)
+                    .setLongLabel("Workspace ${space.name} (ID ${space.id})")
+                    .setIcon(IconCompat.createWithResource(context, com.example.R.drawable.ic_ghost_shield))
+                    .setIntent(intent)
+                    .build()
+            }
+            ShortcutManagerCompat.setDynamicShortcuts(context, shortcutList)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 }

@@ -28,18 +28,55 @@ sealed class WorkspaceCreationState {
 }
 
 class WorkspaceViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao = AppDatabase.getDatabase(application).vaultDao()
+    private val repository = com.example.data.VaultRepository(AppDatabase.getDatabase(application).vaultDao())
 
     private val _creationState = MutableStateFlow<WorkspaceCreationState>(WorkspaceCreationState.Idle)
     val creationState: StateFlow<WorkspaceCreationState> = _creationState.asStateFlow()
 
     val workspacesWithIdentities: StateFlow<List<WorkspaceWithIdentity>> =
-        dao.getAllWorkspacesWithIdentities()
+        repository.getAllWorkspacesWithIdentities()
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5000),
                 initialValue = emptyList()
             )
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val sysSpaces = ShizukuUtils.getWorkspaces(application)
+            val dbSpaces: List<WorkspaceWithIdentity> = repository.getAllWorkspacesWithIdentities().firstOrNull() ?: emptyList()
+            val dbSpaceIds = dbSpaces.map { it.instanceConfig.workspaceId }.toSet()
+            
+            for (sysSpace in sysSpaces) {
+                if (sysSpace.id !in dbSpaceIds && sysSpace.id != "0") {
+                    val identity = IdentityEntity(
+                        fakeName = sysSpace.fakeName,
+                        jobTitle = sysSpace.fakeCompany.substringBefore(" • "),
+                        location = sysSpace.fakeCompany.substringAfter(" • "),
+                        email = sysSpace.fakeEmail,
+                        address = "",
+                        dob = "",
+                        profileIdea = "Auto-synced from Shizuku profile"
+                    )
+                    val instanceConfig = InstanceConfigEntity(
+                        workspaceId = sysSpace.id,
+                        workspaceName = sysSpace.name,
+                        fakeName = sysSpace.fakeName,
+                        fakeEmail = sysSpace.fakeEmail,
+                        fakePhone = sysSpace.fakePhone,
+                        fakeCompany = sysSpace.fakeCompany,
+                        vpnEnabled = false,
+                        proxyRegion = sysSpace.proxyRegion,
+                        iconName = sysSpace.iconName,
+                        unlimitedClones = sysSpace.unlimitedClones,
+                        identityId = identity.id,
+                        workspaceType = "NATIVE_WORK_PROFILE"
+                    )
+                    repository.createWorkspaceAndIdentityTransaction(identity, instanceConfig)
+                }
+            }
+        }
+    }
 
 
     fun hibernateAll() {
@@ -103,37 +140,32 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                     e.printStackTrace()
                 }
 
-                // 2. Provision Shizuku user or Virtual container ID
-                var workspaceId: String? = null
-                if (workspaceType == "WORK_PROFILE") {
-                    _creationState.value = WorkspaceCreationState.Loading("Provisionando Perfil de Trabalho...")
-                    val result = ShizukuUtils.createWorkProfile(vaultName)
-                    workspaceId = result.getOrNull()
-                    if (workspaceId != null) {
-                        ShizukuUtils.executeCommand("am start-user $workspaceId")
-                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_vault_icon '$iconName'")
-                        if (unlimitedClones) {
-                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_unlimited_clones 'true'")
-                        }
-                        if (useResidentialProxy) {
-                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_proxy_region '$selectedProxyRegion'")
-                            com.example.vpn.VpnManager.enableWorkspaceVpn(context, workspaceId, selectedProxyRegion)
-                        }
-                        if (killSwitchEnabled) {
-                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_kill_switch 'true'")
-                        }
-                        if (hardwareSpoofingEnabled) {
-                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_hardware_spoofing 'true'")
-                        }
-                        if (fakeGpsRegion.isNotBlank()) {
-                            ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_fake_gps '$fakeGpsRegion'")
-                        }
-                    } else {
-                        _creationState.value = WorkspaceCreationState.Error("Falha ao criar Perfil via Shizuku.")
-                        return@launch
+                // 2. Provision Shizuku user
+                _creationState.value = WorkspaceCreationState.Loading("Provisionando Perfil de Trabalho...")
+                val result = ShizukuUtils.createWorkProfile(vaultName)
+                val workspaceId = result.getOrNull()
+                if (workspaceId != null) {
+                    ShizukuUtils.executeCommand("am start-user $workspaceId")
+                    ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_vault_icon '$iconName'")
+                    if (unlimitedClones) {
+                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_unlimited_clones 'true'")
+                    }
+                    if (useResidentialProxy) {
+                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_proxy_region '$selectedProxyRegion'")
+                        com.example.vpn.VpnManager.enableWorkspaceVpn(context, workspaceId, selectedProxyRegion)
+                    }
+                    if (killSwitchEnabled) {
+                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_kill_switch 'true'")
+                    }
+                    if (hardwareSpoofingEnabled) {
+                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_hardware_spoofing 'true'")
+                    }
+                    if (fakeGpsRegion.isNotBlank()) {
+                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure chaos_fake_gps '$fakeGpsRegion'")
                     }
                 } else {
-                    workspaceId = "v_${System.currentTimeMillis() % 10000}"
+                    _creationState.value = WorkspaceCreationState.Error("Falha ao criar Perfil via Shizuku.")
+                    return@launch
                 }
 
                 _creationState.value = WorkspaceCreationState.Loading("Persistindo Workspace e Identidade em Transação Única...")
@@ -160,21 +192,20 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                     proxyRegion = selectedProxyRegion,
                     iconName = iconName,
                     unlimitedClones = unlimitedClones,
-                    identityId = identity.id
+                    identityId = identity.id,
+                    workspaceType = "NATIVE_WORK_PROFILE"
                 )
 
                 // 4. Persist workspace and identity as a SINGLE ATOMIC TRANSACTION in Room database
-                dao.createWorkspaceAndIdentityTransaction(identity, instanceConfig)
-
+                repository.createWorkspaceAndIdentityTransaction(identity, instanceConfig)
+                
                 // 5. Apply settings if work profile
-                if (!workspaceId.startsWith("v_")) {
-                    try {
-                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_name '$fName'")
-                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_email '$fEmail'")
-                        ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_company '$fJob • $fLoc'")
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
+                try {
+                    ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_name '$fName'")
+                    ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_email '$fEmail'")
+                    ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_company '$fJob • $fLoc'")
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
 
                 _creationState.value = WorkspaceCreationState.Success(vaultName)

@@ -15,8 +15,8 @@ android {
     applicationId = "com.aistudio.shadowvault.abzx"
     minSdk = 24
     targetSdk = 36
-    versionCode = 264001
-    versionName = "26.4.1"
+    versionCode = 266001
+    versionName = "26.6.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     externalNativeBuild {
@@ -47,8 +47,8 @@ android {
   buildTypes {
     release {
       isCrunchPngs = false
-      isMinifyEnabled = true
-      isShrinkResources = true
+      isMinifyEnabled = false
+      isShrinkResources = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
@@ -128,11 +128,22 @@ dependencies {
   implementation(libs.retrofit)
   implementation("dev.rikka.shizuku:api:13.1.0")
   implementation("dev.rikka.shizuku:provider:13.1.0")
+  
+  // libsu for root access (TwoYi Deep Integration)
+  implementation("com.github.topjohnwu.libsu:core:5.2.2")
+  
+  // APK Signature Scheme v2 (apksig)
+  implementation("com.android.tools.build:apksig:8.3.0")
 
   // Memory Profiling (Item 49)
   debugImplementation("com.squareup.leakcanary:leakcanary-android:2.12")
   implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+  
+  // Storage and Network for heavy GSI ROMs
+  implementation("org.apache.commons:commons-compress:1.26.1")
+  // OkHttp is already implemented via libs.okhttp, ensuring it's available for RomManager
+  
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
@@ -147,6 +158,8 @@ dependencies {
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
+  testImplementation("io.mockk:mockk:1.13.10")
+  androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)

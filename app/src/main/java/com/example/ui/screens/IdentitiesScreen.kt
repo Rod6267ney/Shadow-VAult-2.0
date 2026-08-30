@@ -386,35 +386,37 @@ fun IdentityItem(identity: IdentityEntity, onUpdate: (IdentityEntity) -> Unit, o
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (!expanded) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(identity.email, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
-                IconButton(
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(identity.email))
-                        Toast.makeText(context, "Email copiado", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.size(24.dp).padding(start = 4.dp)
-                ) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy Email", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+        AnimatedVisibility(visible = !expanded) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(identity.email, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), style = MaterialTheme.typography.bodySmall)
+                    IconButton(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(identity.email))
+                            Toast.makeText(context, "Email copiado", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(24.dp).padding(start = 4.dp)
+                    ) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy Email", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    }
                 }
+                if (identity.dob.isNotBlank()) {
+                    Text("Nasc: ${identity.dob}", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                }
+                if (identity.address.isNotBlank()) {
+                    Text(identity.address, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall)
+                }
+                
+                // Mock fields
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("ID/Passport: ❖❖❖❖-MOCK", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+                    Text("CC: **** **** **** 4021", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("Prompt: ${identity.profileIdea}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (identity.dob.isNotBlank()) {
-                Text("Nasc: ${identity.dob}", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
-            }
-            if (identity.address.isNotBlank()) {
-                Text(identity.address, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), style = MaterialTheme.typography.bodySmall)
-            }
-            
-            // Mock fields
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("ID/Passport: ❖❖❖❖-MOCK", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-                Text("CC: **** **** **** 4021", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall)
-            }
-            
-            Spacer(modifier = Modifier.height(4.dp))
-            Text("Prompt: ${identity.profileIdea}", color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
 
         AnimatedVisibility(visible = expanded) {

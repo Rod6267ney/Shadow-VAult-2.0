@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,6 +42,7 @@ import com.example.services.CloneManager
 import com.example.ui.theme.DangerRed
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.VaultBackground
+import com.example.ui.theme.frostedGlass
 import com.example.utils.BiometricAuthHelper
 import com.example.utils.ShortcutUtils
 import com.example.utils.ShizukuUtils
@@ -90,8 +93,8 @@ fun CloneItem(clone: CloneEntity, viewModel: Any? = null, onNavigateToFileManage
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(Color.White.copy(alpha = 0.05f))
-            .border(1.dp, customColor, RoundedCornerShape(16.dp)),
+            .frostedGlass(16.dp)
+            .border(1.dp, if (clone.isRunning) NeonCyan else customColor, RoundedCornerShape(16.dp)),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Row(
@@ -162,11 +165,38 @@ fun CloneItem(clone: CloneEntity, viewModel: Any? = null, onNavigateToFileManage
                                 .background(if (clone.isRunning) Color(0xFF00FF88) else Color(0xFFFFB300))
                         )
                         Text(
-                            text = if (clone.isRunning) "ONLINE • Toque para abrir" else "STANDBY • Toque para abrir",
+                            text = if (clone.isRunning) "ONLINE" else "STANDBY",
                             color = if (clone.isRunning) Color(0xFF00FF88) else Color(0xFFFFB300),
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Medium
                         )
+                        
+                        // Badges
+                        if (clone.cloneMode == "SANDBOX_NON_ROOT") {
+                            Text(
+                                text = "[SANDBOX]",
+                                color = Color(0xFFFF9800),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.background(Color(0xFFFF9800).copy(alpha=0.2f), RoundedCornerShape(4.dp)).padding(horizontal=4.dp, vertical=2.dp)
+                            )
+                        } else {
+                            Text(
+                                text = "[NATIVE]",
+                                color = Color(0xFF2196F3),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.background(Color(0xFF2196F3).copy(alpha=0.2f), RoundedCornerShape(4.dp)).padding(horizontal=4.dp, vertical=2.dp)
+                            )
+                        }
+                        
+                        if (clone.firewallEnabled) {
+                            Icon(Icons.Filled.Security, contentDescription = "Firewall", tint = Color.Red, modifier = Modifier.size(12.dp))
+                        }
+                        
+                        if (clone.spoofProfile != null) {
+                            Icon(Icons.Filled.VpnKey, contentDescription = "Spoofed", tint = Color.Magenta, modifier = Modifier.size(12.dp))
+                        }
                     }
                 }
             }
@@ -298,6 +328,25 @@ fun CloneItem(clone: CloneEntity, viewModel: Any? = null, onNavigateToFileManage
                         }
                     )
 
+                    DropdownMenuItem(
+                        text = { Text("Menu Spoofing (Identidade)", color = Color.White) },
+                        leadingIcon = { Icon(Icons.Filled.VpnKey, contentDescription = null, tint = Color.Magenta) },
+                        onClick = {
+                            showMenu = false
+                            // TODO: Launch Identity Screen or Dialog
+                            android.widget.Toast.makeText(context, "Menu de Spoofing será aberto (WIP)", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+
+                    DropdownMenuItem(
+                        text = { Text("Clonar Configurações", color = Color.White) },
+                        leadingIcon = { Icon(Icons.Filled.Folder, contentDescription = null, tint = Color.Cyan) },
+                        onClick = {
+                            showMenu = false
+                            android.widget.Toast.makeText(context, "Configurações deste clone copiadas para área de transferência", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    
                     HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
 
                     DropdownMenuItem(

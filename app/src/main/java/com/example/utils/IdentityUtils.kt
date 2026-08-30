@@ -25,6 +25,10 @@ object IdentityUtils {
         var fAddress = "Av. Paulista, 1000"
         var fDob = "1990-01-01"
         
+        var fBio = "Sem biografia"
+        var fAvatarSeed = "default"
+        var fPasswords = listOf<String>()
+        
         try {
             val jsonObj = JSONObject(cleanJsonStr)
             fName = jsonObj.optString("fakeName", fName)
@@ -33,6 +37,16 @@ object IdentityUtils {
             fEmail = jsonObj.optString("email", fEmail)
             fAddress = jsonObj.optString("address", fAddress)
             fDob = jsonObj.optString("dob", fDob)
+            fBio = jsonObj.optString("bio", fBio)
+            fAvatarSeed = jsonObj.optString("avatarSeed", fAvatarSeed)
+            val passArray = jsonObj.optJSONArray("passwords")
+            if (passArray != null) {
+                val list = mutableListOf<String>()
+                for (i in 0 until passArray.length()) {
+                    list.add(passArray.optString(i))
+                }
+                fPasswords = list
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -70,12 +84,15 @@ object IdentityUtils {
         // 3. Persist atomically as a single Room transaction linked via foreign key
         val newConfig = dao.createWorkspaceAndIdentityTransaction(identity, initialConfig)
         
-        // 3. Apply to Shizuku secure settings if applicable
+        // 3. Apply to Shizuku secure settings if applicable (Batched for performance)
         if (!workspaceId.startsWith("v_")) {
             try {
-                ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_name '$fName'")
-                ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_email '$fEmail'")
-                ShizukuUtils.executeCommand("settings put --user $workspaceId secure fake_identity_company '$fJob • $fLoc'")
+                val batchCmd = """
+                    settings put --user $workspaceId secure fake_identity_name '$fName'
+                    settings put --user $workspaceId secure fake_identity_email '$fEmail'
+                    settings put --user $workspaceId secure fake_identity_company '$fJob • $fLoc'
+                """.trimIndent()
+                ShizukuUtils.executeCommand(batchCmd)
             } catch (e: Exception) {
                 e.printStackTrace()
             }

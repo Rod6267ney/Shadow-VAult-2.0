@@ -102,17 +102,11 @@ class MainActivity : FragmentActivity(), SensorEventListener {
     override fun onPause() {
         super.onPause()
         sensorManager.unregisterListener(this)
-        // [SECURITY] Sanitize clipboard on background
-        com.example.services.ClipboardSanitizer.onAppBackgrounded(this)
+        // [SECURITY] Clipboard sanitizer removed per user request
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-            val z = event.values[2]
-            if (z < -8.5f) { // Face down threshold
-                com.example.services.AppLockManager.lockApp()
-            }
-        }
+        // [SECURITY] Flip-to-lock REMOVED per user request
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -128,11 +122,7 @@ class MainActivity : FragmentActivity(), SensorEventListener {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     
-    // [SECURITY] Prevent screen capture (Item 29)
-    window.setFlags(
-        android.view.WindowManager.LayoutParams.FLAG_SECURE,
-        android.view.WindowManager.LayoutParams.FLAG_SECURE
-    )
+    // [SECURITY] Screenshot restriction removed per user request
     
     sensorManager = getSystemService(android.content.Context.SENSOR_SERVICE) as SensorManager
     accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -158,12 +148,13 @@ class MainActivity : FragmentActivity(), SensorEventListener {
     try {
         com.example.utils.ShizukuUtils.initialize(this)
         AppLockManager.init(application)
-        com.example.services.AntiDetectionEngine.initialize(applicationContext)
 
         lifecycleScope.launch(Dispatchers.IO) {
+            com.example.services.AntiDetectionEngine.initialize(applicationContext)
+            
             val dao = AppDatabase.getDatabase(applicationContext).vaultDao()
             com.example.utils.ShizukuUtils.onLogEvent = { eventType, message ->
-                CoroutineScope(Dispatchers.IO).launch {
+                lifecycleScope.launch(Dispatchers.IO) {
                     dao.insertSessionLog(SessionLogEntity(eventType = eventType, message = message))
                 }
             }

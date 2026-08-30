@@ -13,13 +13,11 @@ import kotlinx.coroutines.launch
 
 object AppLockManager : DefaultLifecycleObserver {
     
-    private const val AUTO_LOCK_TIMEOUT_MS = 60_000L // 1 minuto de inatividade
+    // [SECURITY] AUTO-LOCK and timers have been REMOVED per user request.
+    // The app will no longer lock itself in the background.
 
     private val _isLocked = MutableStateFlow(false)
     val isLocked: StateFlow<Boolean> = _isLocked
-
-    private var lockJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Main)
 
     fun init(application: Application) {
         // Disabled
@@ -27,30 +25,16 @@ object AppLockManager : DefaultLifecycleObserver {
 
     override fun onStop(owner: LifecycleOwner) {
         super.onStop(owner)
-        // O app foi para background
-        startLockTimer()
+        // No-op
     }
 
     override fun onStart(owner: LifecycleOwner) {
         super.onStart(owner)
-        // O app voltou para foreground
-        cancelLockTimer()
-    }
-
-    private fun startLockTimer() {
-        lockJob?.cancel()
-        lockJob = scope.launch {
-            delay(AUTO_LOCK_TIMEOUT_MS)
-            lockApp()
-        }
-    }
-
-    private fun cancelLockTimer() {
-        lockJob?.cancel()
+        // No-op
     }
 
     fun lockApp() {
-        _isLocked.value = true
+        // No-op - we don't want the app to ever aggressively lock
     }
 
     fun unlockApp() {

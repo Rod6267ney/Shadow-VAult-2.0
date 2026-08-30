@@ -129,4 +129,5 @@ interface VaultDao {
 
     @Query("DELETE FROM private_notes")
     suspend fun clearAllNotes()
+
 }

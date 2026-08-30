@@ -17,7 +17,10 @@ data class CloneEntity(
     val isRunning: Boolean = false,
     val dateCreated: Long = System.currentTimeMillis(),
     val colorHex: String? = null,
-    val linkedIdentityId: String? = null
+    val linkedIdentityId: String? = null,
+    val cloneMode: String = "WORK_PROFILE",
+    val firewallEnabled: Boolean = false,
+    val spoofProfile: String? = null
 )
 
 @Entity(tableName = "identities")
@@ -75,6 +78,7 @@ data class InstanceConfigEntity(
     val iconName: String,
     val unlimitedClones: Boolean,
     val identityId: String? = null,
+    val workspaceType: String = "NATIVE_WORK_PROFILE", // NATIVE_WORK_PROFILE or VIRTUAL
     val lastUpdated: Long = System.currentTimeMillis()
 )
 
@@ -107,3 +111,5 @@ data class NoteEntity(
     val timestamp: Long = System.currentTimeMillis(),
     val lastModified: Long = System.currentTimeMillis()
 )
+
+

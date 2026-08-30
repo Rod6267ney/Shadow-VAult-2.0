@@ -17,5 +17,6 @@ data class WorkspaceConfig(
     val proxyRegion: String = "None",
     val proxyIp: String = "Oculto",
     val iconName: String = "Domain",
-    val unlimitedClones: Boolean = false
+    val unlimitedClones: Boolean = false,
+    val type: String = "NATIVE_WORK_PROFILE"
 )

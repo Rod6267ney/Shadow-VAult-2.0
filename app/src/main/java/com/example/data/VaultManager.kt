@@ -151,4 +151,43 @@ class VaultManager(context: Context) {
     fun getThemeMode(): String {
         return prefs.getString("theme_mode", "DARK") ?: "DARK"
     }
+
+    fun setCloneBiometricLocked(cloneId: String, locked: Boolean) {
+        val currentSet = prefs.getStringSet("biometric_locked_clones", emptySet())?.toMutableSet() ?: mutableSetOf()
+        if (locked) {
+            currentSet.add(cloneId)
+        } else {
+            currentSet.remove(cloneId)
+        }
+        prefs.edit().putStringSet("biometric_locked_clones", currentSet).apply()
+    }
+
+    fun isCloneBiometricLocked(cloneId: String): Boolean {
+        val currentSet = prefs.getStringSet("biometric_locked_clones", emptySet()) ?: emptySet()
+        return currentSet.contains(cloneId)
+    }
+
+    fun saveClonesViewMode(mode: String) {
+        prefs.edit().putString("clones_view_mode", mode).apply()
+    }
+
+    fun getClonesViewMode(): String {
+        return prefs.getString("clones_view_mode", "GRID") ?: "GRID"
+    }
+
+    fun saveClonesSortOrder(order: String) {
+        prefs.edit().putString("clones_sort_order", order).apply()
+    }
+
+    fun getClonesSortOrder(): String {
+        return prefs.getString("clones_sort_order", "NAME_ASC") ?: "NAME_ASC"
+    }
+
+    fun saveAutoLockTimeout(timeoutMs: Long) {
+        prefs.edit().putLong("autolock_timeout_ms", timeoutMs).apply()
+    }
+
+    fun getAutoLockTimeout(): Long {
+        return prefs.getLong("autolock_timeout_ms", 60_000L) // Default 1 minute
+    }
 }

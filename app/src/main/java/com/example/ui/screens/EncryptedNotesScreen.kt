@@ -40,7 +40,10 @@ import com.example.services.ClipboardSanitizer
 import com.example.ui.theme.DangerRed
 import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.frostedGlass
+import com.example.ui.components.EmptyStateView
 import com.example.utils.BiometricAuthHelper
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -236,34 +239,14 @@ fun EncryptedNotesScreen(activeInstance: WorkspaceConfig? = null) {
 
             // Notes List or Empty State
             if (filteredNotes.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Filled.NoteAdd,
-                            contentDescription = null,
-                            tint = Color.Gray.copy(alpha = 0.5f),
-                            modifier = Modifier.size(54.dp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            if (searchQuery.isNotBlank()) "Nenhuma nota encontrada para '$searchQuery'" else "Nenhuma nota criptografada salva",
-                            color = Color.Gray,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Toque em 'Nova Nota' para criar um registro seguro no SQLCipher.",
-                            color = Color.Gray.copy(alpha = 0.7f),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
+                EmptyStateView(
+                    icon = Icons.Filled.NoteAdd,
+                    title = if (searchQuery.isNotBlank()) "Nenhum Resultado" else "Cofre de Notas Vazio",
+                    subtitle = if (searchQuery.isNotBlank()) "Nenhuma nota encontrada para '$searchQuery'" else "Suas anotações são cifradas com SQLCipher e protegidas contra extração de memória.",
+                    actionLabel = if (searchQuery.isBlank()) "CRIAR NOVA NOTA" else null,
+                    onAction = if (searchQuery.isBlank()) { { isCreatingNewNote = true } } else null,
+                    modifier = Modifier.weight(1f)
+                )
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -349,7 +332,7 @@ fun EncryptedNoteCard(
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
             .clickable { onOpen() }
-            .background(Color.White.copy(alpha = 0.04f))
+            .frostedGlass(cornerRadius = 16.dp)
             .border(
                 1.dp,
                 if (note.isLocked) ElectricPurple.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.12f),
@@ -462,6 +445,23 @@ fun EncryptedNoteEditorDialog(
     var isCategoryDropdownExpanded by remember { mutableStateOf(false) }
     val categoriesList = listOf("Geral", "Senhas", "Chaves API", "Frases de Recuperação", "Notas Secretas")
 
+    var isDecrypting by remember { mutableStateOf(existingNote != null) }
+
+    LaunchedEffect(isDecrypting) {
+        if (isDecrypting && existingNote != null) {
+            val realContent = existingNote.content
+            if (realContent.isNotEmpty()) {
+                val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+"
+                for (i in 0..10) {
+                    content = String(CharArray(realContent.length) { chars.random() })
+                    delay(50)
+                }
+                content = realContent
+            }
+            isDecrypting = false
+        }
+    }
+
     // Automatic Clipboard Clear On Dispose (Leaving Note Editor)
     DisposableEffect(Unit) {
         onDispose {
@@ -483,8 +483,9 @@ fun EncryptedNoteEditorDialog(
                 .fillMaxWidth(0.94f)
                 .fillMaxHeight(0.88f)
                 .clip(RoundedCornerShape(20.dp))
+                .frostedGlass(20.dp)
                 .border(1.5.dp, Brush.verticalGradient(listOf(NeonCyan, ElectricPurple)), RoundedCornerShape(20.dp)),
-            color = Color(0xFF0F0E17)
+            color = Color.Transparent
         ) {
             Column(
                 modifier = Modifier

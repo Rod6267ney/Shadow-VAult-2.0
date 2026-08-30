@@ -8,6 +8,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.animateColor
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,6 +28,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -52,6 +58,8 @@ import com.example.ui.theme.DangerRed
 import com.example.ui.theme.ElectricPurple
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.frostedGlass
+import com.example.utils.HapticEngine
+import com.example.utils.useShizukuStatus
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -84,19 +92,30 @@ fun DashboardScreen(
     var identitySubTab by remember { mutableStateOf(0) } // 0: Identidades, 1: Clipboard
     var systemSubTab by remember { mutableStateOf(0) } // 0: Chaos OS, 1: Logs
 
-    // Auto-Lock Inactivity Tracker (60 seconds = 60,000ms)
-    var lastInteractionTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    // [SECURITY] Auto-Lock Inactivity Tracker has been REMOVED per user request
 
-    LaunchedEffect(Unit) {
-        while (isActive) {
-            delay(1000)
-            if (System.currentTimeMillis() - lastInteractionTime >= 60_000L) {
-                // AppLockManager check disabled
-                // onLock()
-                break
-            }
-        }
-    }
+
+
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val borderPulse by infiniteTransition.animateColor(
+        initialValue = NeonCyan.copy(alpha = 0.2f),
+        targetValue = NeonCyan.copy(alpha = 0.7f),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "neon_pulse"
+    )
+    
+    val dangerPulse by infiniteTransition.animateColor(
+        initialValue = Color.White.copy(alpha = 0.12f),
+        targetValue = DangerRed.copy(alpha = 0.5f),
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "danger_pulse"
+    )
 
     LaunchedEffect(showSettings) {
         if (!showSettings) {
@@ -135,7 +154,7 @@ fun DashboardScreen(
                             if (subTab == 0) {
                                 WorkspacesScreen(navController = navController, windowSizeClass = windowSizeClass)
                             } else {
-                                ClonesScreen(navController = navController, windowSizeClass = windowSizeClass)
+                                ClonesScreen()
                             }
                         }
                     }
@@ -150,7 +169,7 @@ fun DashboardScreen(
             } else {
                 Column(modifier = Modifier.fillMaxSize()) {
                     SegmentedTabHeader(
-                        options = listOf("Controle Chaos OS", "Logs", "Armazenamento"),
+                        options = listOf("Shadow Engine", "Logs", "Armazenamento"),
                         selectedIndex = systemSubTab,
                         onSelect = { systemSubTab = it }
                     )
@@ -164,7 +183,7 @@ fun DashboardScreen(
                             label = "SystemSubTabTransition"
                         ) { subTab ->
                             when (subTab) {
-                                0 -> ChaosOsControlScreen()
+                                0 -> ShadowEngineControlScreen()
                                 1 -> SessionLogsScreen()
                                 2 -> StorageVisualizerScreen()
                             }
@@ -180,17 +199,7 @@ fun DashboardScreen(
         return
     }
 
-    if (fileManagerUserId != null && fileManagerPackage != null) {
-        IsolatedFileManagerScreen(
-            userId = fileManagerUserId!!,
-            packageName = fileManagerPackage!!,
-            onNavigateBack = { 
-                fileManagerUserId = null 
-                fileManagerPackage = null
-            }
-        )
-        return
-    }
+
 
     val scope = rememberCoroutineScope()
     var showPanicConfirm by remember { mutableStateOf(false) }
@@ -214,14 +223,6 @@ fun DashboardScreen(
     }
 
     Scaffold(
-        modifier = Modifier.pointerInput(Unit) {
-            awaitPointerEventScope {
-                while (true) {
-                    awaitPointerEvent()
-                    lastInteractionTime = System.currentTimeMillis()
-                }
-            }
-        },
         containerColor = Color.Transparent,
         topBar = {
             Column(
@@ -290,7 +291,7 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(20.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(20.dp))
+                            .border(1.dp, dangerPulse, RoundedCornerShape(20.dp))
                             .padding(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         IconButton(
@@ -321,7 +322,7 @@ fun DashboardScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(Color.White.copy(alpha = 0.04f), RoundedCornerShape(14.dp))
-                            .border(1.dp, NeonCyan.copy(alpha = 0.2f), RoundedCornerShape(14.dp))
+                            .border(1.dp, borderPulse, RoundedCornerShape(14.dp))
                             .padding(horizontal = 12.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -349,6 +350,43 @@ fun DashboardScreen(
                                 activeInstance = activeInstance,
                                 onInstanceSelected = { activeInstance = it }
                             )
+                        }
+                    }
+                }
+
+                // Shizuku Monitor & Live Status Banner (Item 24)
+                if (isReal) {
+                    val (isShizukuAvail, hasShizukuPerm) = useShizukuStatus()
+                    if (!isShizukuAvail || !hasShizukuPerm) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = DangerRed.copy(alpha = 0.15f),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, DangerRed.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    HapticEngine.vibrateClick(context)
+                                    com.example.utils.ShizukuUtils.requestShizukuPermission()
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Filled.Warning, contentDescription = null, tint = DangerRed, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        if (!isShizukuAvail) "Shizuku não iniciado" else "Shizuku requer permissão",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Text("CONECTAR", color = NeonCyan, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

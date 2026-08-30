@@ -5,11 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -78,13 +77,52 @@ fun StorageVisualizerScreen() {
             }
         }
         
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
         
         StorageLegendItem(color = NeonCyan, title = "Apps Clonados", sizeStr = "5.2 GB")
         Spacer(modifier = Modifier.height(12.dp))
         StorageLegendItem(color = ElectricPurple, title = "Mídia & Arquivos", sizeStr = "2.1 GB")
         Spacer(modifier = Modifier.height(12.dp))
         StorageLegendItem(color = VaultSurface, title = "Livre", sizeStr = "7.6 GB")
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        val context = androidx.compose.ui.platform.LocalContext.current
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        var isCleaning by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+
+        androidx.compose.material3.Button(
+            onClick = {
+                isCleaning = true
+                com.example.utils.HapticEngine.vibrateSuccess(context)
+                scope.launch {
+                    com.example.utils.ShizukuUtils.trimAllCaches()
+                    kotlinx.coroutines.delay(1000)
+                    isCleaning = false
+                    android.widget.Toast.makeText(context, "🧹 Todos os caches foram limpos com sucesso!", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                containerColor = NeonCyan.copy(alpha = 0.2f),
+                contentColor = NeonCyan
+            ),
+            shape = RoundedCornerShape(14.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            enabled = !isCleaning
+        ) {
+            androidx.compose.material3.Icon(
+                Icons.Filled.DeleteSweep,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            androidx.compose.material3.Text(
+                if (isCleaning) "LIMPANDO CACHES..." else "LIMPAR TODOS OS CACHES",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+        }
     }
 }
 

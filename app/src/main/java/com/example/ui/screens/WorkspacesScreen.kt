@@ -52,6 +52,8 @@ import com.example.utils.BiometricAuthHelper
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.frostedGlass
 import com.example.ui.theme.interactiveFrostedGlass
+import com.example.ui.components.EmptyStateView
+import com.example.utils.HapticEngine
 import com.example.utils.ShizukuUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -107,7 +109,10 @@ fun WorkspacesScreen(
     fun loadWorkspaces() {
         scope.launch {
             isLoading = true
-            workspaces = ShizukuUtils.getWorkspaces(context)
+            val allSpaces = ShizukuUtils.getWorkspaces(context)
+            val filtered = allSpaces.filter { it.type != "VIRTUAL_CONTAINER" && it.type != "VIRTUAL_MACHINE" }
+            workspaces = filtered
+            com.example.utils.ShortcutUtils.publishDynamicShortcuts(context, filtered)
             isLoading = false
         }
     }
@@ -175,6 +180,7 @@ fun WorkspacesScreen(
                 workspaceViewModel.resetState()
             },
             onComplete = {
+                HapticEngine.vibrateSuccess(context)
                 showCreateDialog = false
                 workspaceViewModel.resetState()
                 loadWorkspaces()
@@ -209,15 +215,14 @@ fun WorkspacesScreen(
                     }
                 }
             } else if (isStateEmpty) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(Icons.Filled.DataSaverOff, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.DarkGray)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Nenhuma Instância Chaos OS Ativa", color = Color.Gray, style = MaterialTheme.typography.titleMedium)
-                }
+                EmptyStateView(
+                    icon = Icons.Filled.Security,
+                    title = "Nenhum Workspace Ativo",
+                    subtitle = "Crie perfis de trabalho ultra-isolados ou instâncias de Chaos OS com hardware camuflado.",
+                    actionLabel = "CRIAR NOVO WORKSPACE",
+                    onAction = { showCreateDialog = true },
+                    modifier = Modifier.fillMaxSize()
+                )
             } else {
                 val listState = rememberLazyListState()
                 if (isExpandedScreen) {
@@ -230,7 +235,7 @@ fun WorkspacesScreen(
                         ) {
                             items(workspaces!!, key = { it.id }) { space ->
                                 Box(modifier = Modifier.clickable { selectedFolderWorkspace = space }) {
-                                    VaultCard(space, scope, context, onOpenFolder = { selectedFolderWorkspace = it }) { loadWorkspaces() }
+                                    VaultCard(space, scope, context, onOpenFolder = { selectedFolderWorkspace = it }, onOpenVm = {}) { loadWorkspaces() }
                                 }
                             }
                         }
@@ -273,7 +278,7 @@ fun WorkspacesScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         items(workspaces!!, key = { it.id }) { space ->
-                            VaultCard(space, scope, context, onOpenFolder = { selectedFolderWorkspace = it }) { loadWorkspaces() }
+                            VaultCard(space, scope, context, onOpenFolder = { selectedFolderWorkspace = it }, onOpenVm = {}) { loadWorkspaces() }
                         }
                     }
                 }
@@ -349,6 +354,7 @@ fun VaultCard(
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
     onOpenFolder: (WorkspaceConfig) -> Unit,
+    onOpenVm: (WorkspaceConfig) -> Unit,
     onRefresh: () -> Unit
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -523,27 +529,29 @@ fun VaultCard(
             
             Spacer(modifier = Modifier.weight(1f))
 
-            // Prominent Folder button
+            val isVm = space.type == "VIRTUAL_CONTAINER" || space.type == "VIRTUAL_MACHINE"
             Button(
                 onClick = {
                     view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                     BiometricAuthHelper.authenticate(
                         context = context,
-                        title = "Acessar Clones - ${space.name}",
-                        subtitle = "Confirme sua biometria para abrir este Container Virtual",
-                        onSuccess = { onOpenFolder(space) }
+                        title = if (isVm) "Acessar VM - ${space.name}" else "Acessar Clones - ${space.name}",
+                        subtitle = "Confirme sua biometria para abrir",
+                        onSuccess = { 
+                            if (isVm) onOpenVm(space) else onOpenFolder(space) 
+                        }
                     )
                 },
                 modifier = Modifier.fillMaxWidth().height(46.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = NeonCyan,
+                    containerColor = if (isVm) ElectricPurple else NeonCyan,
                     contentColor = Color.Black
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Filled.FolderSpecial, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(if (isVm) Icons.Filled.Smartphone else Icons.Filled.FolderSpecial, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("ABRIR PASTA DE CLONES", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                Text(if (isVm) "LIGAR CELULAR VIRTUAL" else "ABRIR PASTA DE CLONES", fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -972,11 +980,6 @@ fun WorkspaceFolderDialog(
                         }
 
                         2 -> {
-                            // Clipboard Vault Tab
-                            ClipboardVaultScreen(activeInstance = space)
-                        }
-
-                        3 -> {
                             // Notas Secretas Tab
                             EncryptedNotesScreen(activeInstance = space)
                         }
@@ -985,9 +988,8 @@ fun WorkspaceFolderDialog(
             }
 
             if (showAppWizard) {
-                AppSelectionWizard(
+                CloneBatchWizard(
                     viewModel = clonesViewModel,
-                    targetWorkspaceId = space.id,
                     onDismiss = {
                         showAppWizard = false
                         onRefresh()

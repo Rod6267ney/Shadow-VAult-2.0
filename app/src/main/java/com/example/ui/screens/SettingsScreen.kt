@@ -32,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.LazyColumn
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.AppDatabase
@@ -95,6 +96,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         geminiKey = vaultManager.getGeminiApiKey()
         profileImageUri = vaultManager.getProfileImageUri()
+        selectedAutoLock = vaultManager.getAutoLockTimeout().toString()
         settingsManager.panicPin.collect { pin ->
             panicPin = pin ?: ""
         }
@@ -391,21 +393,21 @@ fun SettingsScreen(onBack: () -> Unit) {
             )
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState()),
+                .padding(innerPadding),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 600.dp) // Tablet layout support (limits max width)
-                    .padding(horizontal = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.height(16.dp))
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 600.dp) // Tablet layout support (limits max width)
+                        .padding(horizontal = 20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
 
             OutlinedTextField(
                 value = searchQuery,
@@ -582,7 +584,10 @@ fun SettingsScreen(onBack: () -> Unit) {
                         "0" to stringResource(R.string.settings_autolock_never)
                     ),
                     selectedOption = selectedAutoLock,
-                    onSelect = { selectedAutoLock = it },
+                    onSelect = { 
+                        selectedAutoLock = it
+                        vaultManager.saveAutoLockTimeout(it.toLongOrNull() ?: 60000L)
+                    },
                     accentColor = ElectricPurple
                 )
 
@@ -1000,8 +1005,8 @@ fun SettingsScreen(onBack: () -> Unit) {
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
-                        Text("v2.0.0 — Build completo", color = NeonCyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text("• Motor Chaos OS com bypass engine\n• 40 toggles de segurança\n• Gerador de personas com IA\n• Criptografia SQLCipher AES-256\n• Anti-detecção nativo C++\n• VPN/Proxy por workspace\n• Notas e clipboard criptografados",
+                        Text("v26.6.0 — 50 Major Improvements Update", color = NeonCyan, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("• App Freezer (0% RAM em background)\n• Bloqueio Biométrico Individual por Clone\n• Busca em Tempo Real & Alternador Grade/Lista\n• Auto-Lock Inteligente por Inatividade\n• Limpador Inteligente de Cache & Purgação Profunda\n• Monitor de Shizuku Vivo & Dynamic Shortcuts\n• Bypass de Economia de Bateria (Doze Whitelist)\n• Diagnóstico de Kernel fw.max_users\n• Otimização de Performance & Zero Leak/ANR",
                             color = Color.Gray, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
@@ -1033,6 +1038,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
             Spacer(modifier = Modifier.height(32.dp))
             }
+            } // Close item block
         }
     }
 }

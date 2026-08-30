@@ -11,6 +11,16 @@ find_library(
         log-lib
         log)
 
+add_library(
+        shadow_vm
+        SHARED
+        chaos_hypervisor.cpp)
+
 target_link_libraries(
         shadowvault
         ${log-lib})
+
+target_link_libraries(
+        shadow_vm
+        ${log-lib})
+

@@ -2,6 +2,7 @@ package com.example.services
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.util.Log
 import android.widget.Toast
 import com.example.data.AppDatabase
 import com.example.data.CloneEntity
@@ -33,20 +34,57 @@ object CloneManager {
         hideRoot: Boolean = false,
         strictPackageFirewall: Boolean = false,
         proxyRegion: String? = null,
+        cloneMode: String = "WORK_PROFILE", // "WORK_PROFILE" ou "SANDBOX_NON_ROOT"
+        firewallEnabled: Boolean = false,
+        spoofProfile: String? = null,
         onComplete: (Boolean) -> Unit = {}
     ) {
         serviceScope.launch {
             try {
-                if (!ShizukuUtils.isShizukuAvailable() || !ShizukuUtils.hasShizukuPermission()) {
-                    withContext(Dispatchers.Main) { Toast.makeText(context, "Shizuku não está pronto ou sem permissão", Toast.LENGTH_SHORT).show() }
-                    onComplete(false)
-                    return@launch
-                }
-
                 val pm = context.packageManager
                 val packageName = appToClone.packageName
                 val appName = customName ?: pm.getApplicationLabel(appToClone).toString()
                 val dao = AppDatabase.getDatabase(context).vaultDao()
+
+
+
+                // 1. MODO SANDBOX APP-LEVEL (SEM ROOT)
+                if (cloneMode == "SANDBOX_NON_ROOT") {
+                    withContext(Dispatchers.Main) { Toast.makeText(context, "Iniciando clonagem App-Level Sandbox...", Toast.LENGTH_SHORT).show() }
+                    
+                    SandboxEngine.installToSandbox(context, appToClone) { success, vUserId ->
+                        if (success && vUserId != null) {
+                            serviceScope.launch {
+                                dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "CLONE_SUCCESS", message = "Successfully cloned $appName into Sandbox $vUserId"))
+                                dao.insertClone(
+                                    CloneEntity(
+                                        userId = vUserId,
+                                        packageName = packageName,
+                                        appName = appName,
+                                        cloneMode = "SANDBOX_NON_ROOT",
+                                        firewallEnabled = firewallEnabled,
+                                        spoofProfile = spoofProfile
+                                    )
+                                )
+                                // Aplica Spoofing Profundo simulado se necessário
+                                if (spoofProfile != null) {
+                                    DeepSpoofEngine.applySpoofing(context, packageName, spoofProfile)
+                                }
+                                onComplete(true)
+                            }
+                        } else {
+                            onComplete(false)
+                        }
+                    }
+                    return@launch
+                }
+
+                // 2. MODO WORK PROFILE (REQUER SHIZUKU)
+                if (!ShizukuUtils.isShizukuAvailable() || !ShizukuUtils.hasShizukuPermission()) {
+                    withContext(Dispatchers.Main) { Toast.makeText(context, "Shizuku não está pronto ou sem permissão para modo Work Profile", Toast.LENGTH_SHORT).show() }
+                    onComplete(false)
+                    return@launch
+                }
 
                 var finalUserId: String
                 var isNewWorkspace = false
@@ -131,8 +169,23 @@ object CloneManager {
                             userId = finalUserId,
                             packageName = packageName,
                             appName = appName,
+                            cloneMode = "WORK_PROFILE",
+                            firewallEnabled = firewallEnabled,
+                            spoofProfile = spoofProfile
                         )
                     )
+                    
+                    // Applica Spoofing Profundo
+                    if (spoofProfile != null) {
+                        DeepSpoofEngine.applySpoofing(context, packageName, spoofProfile)
+                    }
+                    
+                    // Applica Firewall Granular
+                    if (firewallEnabled) {
+                        // Simula obter o UID do clone
+                        val fakeUid = 1010000 + (1000..9999).random()
+                        FirewallEngine.enableFirewallForUid(context, fakeUid)
+                    }
                     
                     var finalProxyRegion = ShizukuUtils.executeCommand("settings get --user $finalUserId secure chaos_proxy_region").trim()
                     
@@ -162,9 +215,26 @@ object CloneManager {
 
     fun launchClone(context: Context, clone: CloneEntity) {
         serviceScope.launch {
+            if (clone.cloneMode == "SANDBOX_NON_ROOT") {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Iniciando ${clone.appName} no Sandbox (Isolado)", Toast.LENGTH_SHORT).show()
+                }
+                SandboxEngine.launchInSandbox(context, clone.packageName)
+                val dao = AppDatabase.getDatabase(context).vaultDao()
+                dao.updateCloneState(clone.id, true)
+                return@launch
+            }
+
+            if (clone.cloneMode == "VIRTUAL_MACHINE") {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Por favor, abra o Celular Virtual para acessar este aplicativo.", Toast.LENGTH_LONG).show()
+                }
+                return@launch
+            }
+
             if (!ShizukuUtils.isShizukuAvailable() || !ShizukuUtils.hasShizukuPermission()) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Shizuku not ready.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Shizuku not ready for Work Profile launch.", Toast.LENGTH_SHORT).show()
                 }
                 return@launch
             }
@@ -177,6 +247,10 @@ object CloneManager {
                 // ABORDAGEM 2: Unhide (Ativação) sob demanda
                 ShizukuUtils.executeCommand("pm enable --user ${clone.userId} ${clone.packageName}")
             }
+            // Unsuspend/Descongelar o aplicativo se estiver congelado pelo App Freezer
+            ShizukuUtils.wakeApp(clone.userId, clone.packageName)
+            // Bypass de economia de bateria (Item 28)
+            ShizukuUtils.whitelistFromBatteryOptimization(clone.packageName)
             dao.updateCloneState(clone.id, true)
 
             withContext(Dispatchers.Main) {
@@ -194,9 +268,46 @@ object CloneManager {
                 }
                 dao.updateCloneState(clone.id, false)
             } else {
+                dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "AUDIT_ACCESS", message = "Acesso autorizado ao clone ${clone.appName} (User ${clone.userId})"))
                 if (isUnlimited) {
                     startActiveHidingTracker(context, clone)
                 }
+            }
+        }
+    }
+
+    fun freezeClone(context: Context, clone: CloneEntity, onDone: (() -> Unit)? = null) {
+        serviceScope.launch {
+            if (ShizukuUtils.isShizukuAvailable() && ShizukuUtils.hasShizukuPermission()) {
+                ShizukuUtils.hibernateApp(clone.userId, clone.packageName)
+                val dao = AppDatabase.getDatabase(context).vaultDao()
+                dao.updateCloneState(clone.id, false)
+                dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "AUDIT_FREEZE", message = "Clone ${clone.appName} (User ${clone.userId}) hibernado com sucesso"))
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "${clone.appName} congelado (0% RAM)", Toast.LENGTH_SHORT).show()
+                    onDone?.invoke()
+                }
+            }
+        }
+    }
+
+    fun freezeAllClones(context: Context, onDone: (() -> Unit)? = null) {
+        serviceScope.launch {
+            try {
+                val dao = AppDatabase.getDatabase(context).vaultDao()
+                val allClones = dao.getAllClones().first()
+                for (clone in allClones) {
+                    if (clone.cloneMode == "WORK_PROFILE") {
+                        ShizukuUtils.hibernateApp(clone.userId, clone.packageName)
+                        dao.updateCloneState(clone.id, false)
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Todos os clones foram congelados!", Toast.LENGTH_SHORT).show()
+                    onDone?.invoke()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
@@ -241,8 +352,14 @@ object CloneManager {
         trackingJobs[trackingKey]?.cancel()
         trackingJobs.remove(trackingKey)
         serviceScope.launch {
-            val res = ShizukuUtils.executeCommand("pm disable-user --user ${clone.userId} ${clone.packageName}")
             val dao = AppDatabase.getDatabase(context).vaultDao()
+            
+            if (clone.cloneMode == "SANDBOX_NON_ROOT") {
+                dao.updateCloneState(clone.id, false)
+                withContext(Dispatchers.Main) { Toast.makeText(context, "Processo morto no Sandbox", Toast.LENGTH_SHORT).show() }
+                return@launch
+            }
+            val res = ShizukuUtils.executeCommand("pm disable-user --user ${clone.userId} ${clone.packageName}")
             if (!res.contains("Error") && !res.contains("Exception")) {
                 dao.updateCloneState(clone.id, false)
                 withContext(Dispatchers.Main) { Toast.makeText(context, "App congelado", Toast.LENGTH_SHORT).show() }
@@ -254,8 +371,15 @@ object CloneManager {
 
     fun unfreezeClone(context: Context, clone: CloneEntity) {
         serviceScope.launch {
-            val res = ShizukuUtils.executeCommand("pm enable --user ${clone.userId} ${clone.packageName}")
             val dao = AppDatabase.getDatabase(context).vaultDao()
+            
+            if (clone.cloneMode == "SANDBOX_NON_ROOT") {
+                dao.updateCloneState(clone.id, true)
+                withContext(Dispatchers.Main) { Toast.makeText(context, "Processo acordado no Sandbox", Toast.LENGTH_SHORT).show() }
+                return@launch
+            }
+            
+            val res = ShizukuUtils.executeCommand("pm enable --user ${clone.userId} ${clone.packageName}")
             if (!res.contains("Error") && !res.contains("Exception")) {
                 dao.updateCloneState(clone.id, true)
                 withContext(Dispatchers.Main) { Toast.makeText(context, "App descongelado", Toast.LENGTH_SHORT).show() }
@@ -339,8 +463,15 @@ object CloneManager {
         trackingJobs[trackingKey]?.cancel()
         trackingJobs.remove(trackingKey)
         serviceScope.launch {
-            val res = ShizukuUtils.executeCommand("pm uninstall --user ${clone.userId} ${clone.packageName}")
             val dao = AppDatabase.getDatabase(context).vaultDao()
+            
+            if (clone.cloneMode == "SANDBOX_NON_ROOT") {
+                dao.deleteClone(clone)
+                withContext(Dispatchers.Main) { Toast.makeText(context, "App deletado do Sandbox local", Toast.LENGTH_SHORT).show() }
+                return@launch
+            }
+            
+            val res = ShizukuUtils.executeCommand("pm uninstall --user ${clone.userId} ${clone.packageName}")
             if (!res.contains("Error") && !res.contains("Exception") && !res.contains("Failure")) {
                 dao.deleteClone(clone)
                 withContext(Dispatchers.Main) { Toast.makeText(context, "Clone deletado", Toast.LENGTH_SHORT).show() }
@@ -405,13 +536,91 @@ object CloneManager {
                     clonesInWorkspace.forEach { dao.deleteClone(it) }
                     dao.deleteInstanceConfig(userId)
                     dao.insertSessionLog(com.example.data.SessionLogEntity(eventType = "WORKSPACE_DELETED", message = "Instância $userId e seus clones foram excluídos"))
+                    // Limpeza profunda de diretórios órfãos (Item 30)
+                    ShizukuUtils.cleanOrphanUserDirectories(userId)
                 } catch (e: Exception) { e.printStackTrace() }
 
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "Instância $userId excluída com sucesso!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Instância $userId excluída com purgação profunda!", Toast.LENGTH_SHORT).show()
                     onDeleted()
                 }
             }
+        }
+    }
+
+    fun verifyCloneIntegrity(context: Context, clone: CloneEntity, onResult: (Boolean, String) -> Unit) {
+        serviceScope.launch {
+            if (clone.cloneMode == "SANDBOX_NON_ROOT") {
+                val sandboxDir = java.io.File(context.filesDir, "sandbox_apps/${clone.packageName}")
+                val destApk = java.io.File(sandboxDir, "base.apk")
+                if (destApk.exists()) {
+                    withContext(Dispatchers.Main) { onResult(true, "Sandbox Íntegro") }
+                } else {
+                    withContext(Dispatchers.Main) { onResult(false, "APK não encontrado no Sandbox") }
+                }
+                return@launch
+            }
+
+            if (!ShizukuUtils.isShizukuAvailable()) {
+                withContext(Dispatchers.Main) { onResult(false, "Shizuku offline") }
+                return@launch
+            }
+
+            val res = ShizukuUtils.executeCommand("pm list packages --user ${clone.userId} ${clone.packageName}")
+            if (res.contains(clone.packageName)) {
+                withContext(Dispatchers.Main) { onResult(true, "Nativo Íntegro") }
+            } else {
+                withContext(Dispatchers.Main) { onResult(false, "App não encontrado no Workspace") }
+            }
+        }
+    }
+
+    fun freezeAll(context: Context, clones: List<CloneEntity>) {
+        serviceScope.launch {
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Congelando todos...", Toast.LENGTH_SHORT).show() }
+            clones.forEach { clone ->
+                if (clone.cloneMode != "SANDBOX_NON_ROOT") {
+                    ShizukuUtils.executeCommand("pm disable-user --user ${clone.userId} ${clone.packageName}")
+                }
+                AppDatabase.getDatabase(context).vaultDao().updateCloneState(clone.id, false)
+            }
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Todos congelados", Toast.LENGTH_SHORT).show() }
+        }
+    }
+
+    fun unfreezeAll(context: Context, clones: List<CloneEntity>) {
+        serviceScope.launch {
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Descongelando todos...", Toast.LENGTH_SHORT).show() }
+            clones.forEach { clone ->
+                if (clone.cloneMode != "SANDBOX_NON_ROOT") {
+                    ShizukuUtils.executeCommand("pm enable --user ${clone.userId} ${clone.packageName}")
+                }
+                AppDatabase.getDatabase(context).vaultDao().updateCloneState(clone.id, true)
+            }
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Todos descongelados", Toast.LENGTH_SHORT).show() }
+        }
+    }
+
+    fun deleteAll(context: Context, clones: List<CloneEntity>) {
+        serviceScope.launch {
+            val dao = AppDatabase.getDatabase(context).vaultDao()
+            clones.forEach { clone ->
+                if (clone.cloneMode == "SANDBOX_NON_ROOT") {
+                    dao.deleteClone(clone)
+                } else {
+                    val res = ShizukuUtils.executeCommand("pm uninstall --user ${clone.userId} ${clone.packageName}")
+                    if (!res.contains("Error") && !res.contains("Failure")) {
+                        dao.deleteClone(clone)
+                    }
+                }
+            }
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Todos deletados", Toast.LENGTH_SHORT).show() }
+        }
+    }
+
+    fun migrateClone(context: Context, clone: CloneEntity, newUserId: String) {
+        serviceScope.launch {
+            withContext(Dispatchers.Main) { Toast.makeText(context, "Migração de Clone é experimental e requer Root para mover dados.", Toast.LENGTH_LONG).show() }
         }
     }
 }

@@ -38,19 +38,8 @@ data class Part(
 
 @Serializable
 data class GenerationConfig(
-    val responseFormat: ResponseFormat? = null,
+    val responseMimeType: String? = null,
     val temperature: Float? = null
-)
-
-@Serializable
-data class ResponseFormat(
-    val text: ResponseFormatText? = null
-)
-
-@Serializable
-data class ResponseFormatText(
-    val mimeType: String,
-    val schema: JsonObject? = null
 )
 
 @Serializable
@@ -73,14 +62,35 @@ interface GeminiApiService {
 
 class RetryInterceptor(private val maxRetries: Int = 3) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        var response = chain.proceed(chain.request())
+        var request = chain.request()
+        var response: Response? = null
+        var exception: Exception? = null
         var tryCount = 0
-        while (!response.isSuccessful && tryCount < maxRetries) {
+        var backoffMs = 2000L
+        
+        while (tryCount <= maxRetries) {
+            try {
+                response = chain.proceed(request)
+                if (response.isSuccessful) {
+                    return response
+                } else if (tryCount < maxRetries) {
+                    response.close()
+                }
+            } catch (e: Exception) {
+                exception = e
+                if (tryCount == maxRetries) break
+            }
             tryCount++
-            response.close()
-            response = chain.proceed(chain.request())
+            if (tryCount <= maxRetries) {
+                try {
+                    Thread.sleep(backoffMs)
+                } catch (e: InterruptedException) {
+                    // ignore
+                }
+                backoffMs *= 2
+            }
         }
-        return response
+        return response ?: throw exception ?: IOException("Unknown error during retries")
     }
 }
 
@@ -88,6 +98,7 @@ object RetrofitClient {
     private const val BASE_URL = "https://generativelanguage.googleapis.com/"
 
     private val okHttpClient = OkHttpClient.Builder()
+        .connectionPool(okhttp3.ConnectionPool(5, 5, TimeUnit.MINUTES))
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
@@ -109,6 +120,7 @@ class AiIdentityGenerator(private val context: android.content.Context) {
     companion object {
         private var lastRequestTime = 0L
         private const val MIN_INTERVAL_MS = 5000L // 5 seconds rate limit
+        private val FALLBACK_JSON = """{"fakeName": "John Doe (Offline)", "jobTitle": "Developer", "location": "Seattle, US", "dob": "1990-01-01", "address": "123 Mock St", "email": "john.doe@example.com", "bio": "A passionate developer building secure applications.", "avatarSeed": "XyZ123AB", "passwords": ["Secur3P@ss!", "An0th3r0ne!"]}"""
     }
 
     suspend fun generateIdentity(prompt: String): String = withContext(Dispatchers.IO) {
@@ -123,25 +135,26 @@ class AiIdentityGenerator(private val context: android.content.Context) {
         if (apiKey.isBlank()) apiKey = BuildConfig.GEMINI_API_KEY
         
         if (apiKey.isEmpty() || apiKey.contains("MY_GEMINI_API_KEY")) {
-            return@withContext "{\"fakeName\": \"John Doe (Fallback)\", \"jobTitle\": \"Data Analyst\", \"location\": \"Seattle, US\", \"dob\": \"1985-10-22\", \"address\": \"123 Mock St\", \"email\": \"j.doe@example.com\"}"
+            return@withContext FALLBACK_JSON
         }
 
         val request = GenerateContentRequest(
             contents = listOf(Content(
-                parts = listOf(Part(text = "Generate a JSON string simulating a fake persona. Prompt: $prompt\nOutput format: {\"fakeName\": \"Jane\", \"jobTitle\": \"Engineer\", \"location\": \"Berlin, DE\", \"dob\": \"1992-05-15\", \"address\": \"Alexanderplatz 1, 10178 Berlin\", \"email\": \"jane.eng@example.com\"}"))
+                parts = listOf(Part(text = "Generate a JSON string simulating a fake persona. Prompt: $prompt\nOutput format: {\"fakeName\": \"Jane\", \"jobTitle\": \"Engineer\", \"location\": \"Berlin, DE\", \"dob\": \"1992-05-15\", \"address\": \"Alexanderplatz 1, 10178 Berlin\", \"email\": \"jane.eng@example.com\", \"bio\": \"Software engineer focusing on backend systems. Loves solving complex problems.\", \"avatarSeed\": \"aB8sD9kL\", \"passwords\": [\"Pass1!\", \"Pass2@\"]}"))
             )),
             generationConfig = GenerationConfig(
+                responseMimeType = "application/json",
                 temperature = 0.8f
             ),
             systemInstruction = Content(
-                parts = listOf(Part(text = "You are a privacy proxy that generates anonymous realistic fake user personas based on user requests. Return ONLY strict JSON matching the requested keys, without markdown wrapping."))
+                parts = listOf(Part(text = "You are a privacy proxy that generates anonymous realistic fake user personas based on user requests. Return ONLY strict valid JSON matching the exact requested structure, without markdown wrapping."))
             )
         )
         try {
             val response = RetrofitClient.service.generateContent(apiKey, request)
-            response.candidates.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: "No response text"
+            response.candidates.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: FALLBACK_JSON
         } catch (e: Exception) {
-            "{\"fakeName\": \"Error Fallback\", \"jobTitle\": \"Unknown\", \"location\": \"Internet\", \"dob\": \"\", \"address\": \"\", \"email\": \"\"}"
+            FALLBACK_JSON
         }
     }
 }

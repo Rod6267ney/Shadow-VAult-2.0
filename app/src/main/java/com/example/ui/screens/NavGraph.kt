@@ -26,19 +26,9 @@ fun AppNavigation(windowSizeClass: androidx.compose.material3.windowsizeclass.Wi
     val realPin by settingsManager.realPin.collectAsState(initial = null)
     val navController = rememberNavController()
 
-    // [SECURITY] Observe global lock state to enforce Auto-Lock
-    val isLocked by com.example.services.AppLockManager.isLocked.collectAsState()
-    androidx.compose.runtime.LaunchedEffect(isLocked) {
-        if (isLocked) {
-            val currentRoute = navController.currentBackStackEntry?.destination?.route
-            if (currentRoute != null && currentRoute != "login" && currentRoute != "launcher" && currentRoute != "onboarding") {
-                navController.navigate("login") { 
-                    popUpTo("launcher") { inclusive = false }
-                    launchSingleTop = true
-                }
-            }
-        }
-    }
+    // [SECURITY] Global lock state observer has been REMOVED per user request
+    // The app will now only require a PIN on initial cold start.
+
 
     // We can't navigate properly until we know if a pin exists. Wait for realPin state if possible,
     // but compose doesn't let us easily block. We'll use startDestination based on realPin
@@ -76,13 +66,15 @@ fun AppNavigation(windowSizeClass: androidx.compose.material3.windowsizeclass.Wi
         }
     ) {
         composable("launcher") {
-            HolographicScannerScreen(onScanComplete = {
+            androidx.compose.runtime.LaunchedEffect(Unit) {
                 if (!isOnboarded) {
                     navController.navigate("onboarding") { popUpTo("launcher") { inclusive = true } }
                 } else {
                     navController.navigate("login") { popUpTo("launcher") { inclusive = true } }
                 }
-            })
+            }
+            // Empty Box while navigating
+            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize())
         }
         composable("onboarding") {
             OnboardingScreen(
@@ -103,7 +95,7 @@ fun AppNavigation(windowSizeClass: androidx.compose.material3.windowsizeclass.Wi
                 }
             )
         }
-                composable(
+        composable(
             route = "dashboard/{isReal}",
             arguments = listOf(androidx.navigation.navArgument("isReal") { type = androidx.navigation.NavType.BoolType })
         ) { backStackEntry ->
@@ -118,24 +110,6 @@ fun AppNavigation(windowSizeClass: androidx.compose.material3.windowsizeclass.Wi
                 navController = navController,
                 windowSizeClass = windowSizeClass
             )
-        }
-        composable(
-            route = "file_manager/{userId}/{packageName}",
-            arguments = listOf(
-                androidx.navigation.navArgument("userId") { type = androidx.navigation.NavType.StringType },
-                androidx.navigation.navArgument("packageName") { type = androidx.navigation.NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val userId = backStackEntry.arguments?.getString("userId") ?: ""
-            val packageName = backStackEntry.arguments?.getString("packageName") ?: ""
-            IsolatedFileManagerScreen(
-                userId = userId,
-                packageName = packageName,
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-        composable("storage_dashboard") {
-            StorageDashboardScreen(onBack = { navController.popBackStack() })
         }
     }
 }
